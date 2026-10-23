@@ -1,0 +1,25 @@
+# Caddy gets HTTPS certificates automatically. Point these DNS names at the server first.
+
+# Main site: uploader, viewer pages, API.
+{$SITE_HOST} {
+	encode zstd gzip
+	request_body {
+		max_size 48MB
+	}
+	reverse_proxy app:3000
+}
+
+# Image host: i.yoursite.com/{id}/{file} → app /i/{id}/{file}.
+# Put Cloudflare (proxied DNS) in front of this host to cache images at the edge.
+{$IMAGE_HOST} {
+	rewrite * /i{uri}
+	reverse_proxy app:3000
+}
+
+# Browsers upload straight to storage with presigned URLs, so MinIO needs a public HTTPS name.
+{$S3_HOST} {
+	request_body {
+		max_size 40MB
+	}
+	reverse_proxy minio:9000
+}

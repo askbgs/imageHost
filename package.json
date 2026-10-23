@@ -1,0 +1,38 @@
+{
+  "name": "imghost",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Self-hosted image hosting with drag-and-drop uploads and an ImgBB-compatible API",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build && npm run build:worker",
+    "build:worker": "esbuild worker/worker.ts scripts/migrate.ts scripts/create-api-key.ts scripts/setup-bucket.ts --bundle --platform=node --target=node20 --outdir=dist --entry-names=[name] --packages=external --tsconfig=tsconfig.json",
+    "start": "next start",
+    "worker": "node dist/worker.js",
+    "worker:dev": "tsx watch worker/worker.ts",
+    "migrate": "tsx scripts/migrate.ts",
+    "create-key": "tsx scripts/create-api-key.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1156.0",
+    "@aws-sdk/s3-request-presigner": "^3.1156.0",
+    "bullmq": "^5.0.0",
+    "ioredis": "^5.4.0",
+    "nanoid": "^5.0.9",
+    "next": "^16.0.0",
+    "pg": "^8.13.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "sharp": "^0.35.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/pg": "^8.11.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "esbuild": "^0.25.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  }
+}
