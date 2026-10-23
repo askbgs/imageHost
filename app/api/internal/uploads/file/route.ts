@@ -1,8 +1,8 @@
 import { config } from "@/lib/config";
-import { ApiError, apiOk, clientIp, handleError, limitHeaders } from "@/lib/http";
+import { ApiError, apiOk, handleError } from "@/lib/http";
 import { parseExpiration } from "@/lib/images";
 import { ingestBytes } from "@/lib/ingest";
-import { rateLimit } from "@/lib/ratelimit";
+import { webUploadGate } from "@/lib/webupload";
 
 export const runtime = "nodejs";
 export const maxDuration = 90;
@@ -19,9 +19,7 @@ export async function POST(req: Request) {
       throw new ApiError("file_too_large", `Images must be ${config.maxUploadBytes / 1024 / 1024} MB or smaller`);
     }
 
-    const ip = clientIp(req);
-    const rl = await rateLimit(`rl:guest:${ip ?? "unknown"}`, config.limits.guestUploadsPerHour);
-    if (!rl.ok) throw new ApiError("rate_limited", "Too many uploads, try again later", limitHeaders(rl));
+    const { user, ip } = await webUploadGate(req);
 
     let form: FormData;
     try {
@@ -37,6 +35,7 @@ export async function POST(req: Request) {
       name: file.name || null,
       expirationSeconds: parseExpiration(form.get("expiration")),
       uploaderIp: ip,
+      userId: user?.id,
     });
     return apiOk(result.data, result.done ? 200 : 202);
   } catch (err) {

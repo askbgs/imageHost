@@ -1,9 +1,9 @@
 import { config } from "@/lib/config";
 import { fetchRemoteImage } from "@/lib/fetch-remote";
-import { ApiError, apiOk, clientIp, handleError, limitHeaders } from "@/lib/http";
+import { ApiError, apiOk, handleError } from "@/lib/http";
 import { parseExpiration } from "@/lib/images";
 import { ingestBytes } from "@/lib/ingest";
-import { rateLimit } from "@/lib/ratelimit";
+import { webUploadGate } from "@/lib/webupload";
 
 export const runtime = "nodejs";
 export const maxDuration = 90;
@@ -15,12 +15,16 @@ export async function POST(req: Request) {
     if (!body?.url) throw new ApiError("invalid_request", "url is required");
     const expirationSeconds = parseExpiration(body.expiration);
 
-    const ip = clientIp(req);
-    const rl = await rateLimit(`rl:guest:${ip ?? "unknown"}`, config.limits.guestUploadsPerHour);
-    if (!rl.ok) throw new ApiError("rate_limited", "Too many uploads, try again later", limitHeaders(rl));
+    const { user, ip } = await webUploadGate(req);
 
     const remote = await fetchRemoteImage(body.url, config.maxUploadBytes);
-    const result = await ingestBytes({ bytes: remote.bytes, name: remote.name, expirationSeconds, uploaderIp: ip });
+    const result = await ingestBytes({
+      bytes: remote.bytes,
+      name: remote.name,
+      expirationSeconds,
+      uploaderIp: ip,
+      userId: user?.id,
+    });
     return apiOk(result.data, result.done ? 200 : 202);
   } catch (err) {
     return handleError(err);

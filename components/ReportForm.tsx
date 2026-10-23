@@ -32,7 +32,7 @@ export function ReportForm({ imageId }: { imageId: string }) {
   if (!open) {
     return (
       <div>
-        <button type="button" className="btn secondary small" onClick={() => setOpen(true)}>
+        <button type="button" className="btn ghost small" onClick={() => setOpen(true)}>
           Report this image
         </button>
       </div>

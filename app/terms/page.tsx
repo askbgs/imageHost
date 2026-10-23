@@ -25,8 +25,8 @@ export default function Terms() {
 
       <h2>Deleting images</h2>
       <p>
-        Each upload comes with a delete link. Keep it: without an account, it is the only way to remove the image
-        yourself. Images with an expiry are deleted automatically when it passes.
+        You can delete your images at any time from My images. Each upload also comes with a delete link. Images
+        with an expiry are deleted automatically when it passes.
       </p>
 
       <h2>No warranty</h2>

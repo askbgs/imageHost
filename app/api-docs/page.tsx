@@ -8,6 +8,9 @@ export default function ApiDocs() {
     <div className="prose">
       <h1>Upload API</h1>
       <p>
+        <a href="/account/keys">Get an API key</a> from your account, then send images from any app.
+      </p>
+      <p>
         One endpoint uploads an image from a file, a base64 string or a public URL. The request and response follow
         ImgBB&apos;s format, so tools built for ImgBB (ShareX, WordPress plugins, n8n HTTP nodes) work after you change
         the endpoint and key.
@@ -102,7 +105,10 @@ expiration  optional  delete after N seconds (60 to 15552000)`}</pre>
       </table>
 
       <h2>Get a key</h2>
-      <p>API keys are issued by the site operator. Contact <a href={`mailto:${config.abuseEmail}`}>{config.abuseEmail}</a>.</p>
+      <p>
+        <a href="/signup">Create an account</a>, then open <a href="/account/keys">API keys</a> and create a key for each app.
+        Each key can upload {config.limits.userUploadsPerHour} images per hour. Images uploaded with your key appear in My images.
+      </p>
     </div>
   );
 }

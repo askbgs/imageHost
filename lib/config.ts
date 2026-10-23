@@ -46,6 +46,8 @@ export const config = {
 
   limits: {
     guestUploadsPerHour: int("GUEST_UPLOADS_PER_HOUR", 30),
+    userUploadsPerHour: int("USER_UPLOADS_PER_HOUR", 200),
+    maxApiKeysPerUser: int("MAX_API_KEYS_PER_USER", 10),
     reportsPerHour: int("REPORTS_PER_HOUR", 10),
   },
 
@@ -65,8 +67,16 @@ export const config = {
   // straight from the bucket (Railway bucket egress is free; service egress is not).
   imageDelivery: env("IMAGE_DELIVERY", "proxy") === "redirect" ? ("redirect" as const) : ("proxy" as const),
 
-  adminUser: env("ADMIN_USER", "admin"),
-  adminPassword: process.env.ADMIN_PASSWORD || "",
+  // Accounts
+  allowSignup: env("ALLOW_SIGNUP", "true") === "true",
+  // "true" (default): only signed-in users can upload from the website.
+  requireLoginToUpload: env("REQUIRE_LOGIN_TO_UPLOAD", "true") === "true",
+  // Accounts with these emails get the admin role (moderation) when they sign in.
+  adminEmails: (process.env.ADMIN_EMAILS || "")
+    .split(",")
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean),
+  sessionDays: int("SESSION_DAYS", 30),
 
   // Optional: an HTTP endpoint that scores images for NSFW content (see lib/moderation.ts).
   moderationWebhookUrl: process.env.MODERATION_WEBHOOK_URL || "",

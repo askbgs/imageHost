@@ -2,7 +2,7 @@
 
 Self-hosted image hosting: drag and drop anywhere on the page (or paste, pick files, or give a URL), and get a viewer page, a direct link, and HTML, BBCode and Markdown embeds. Includes an ImgBB-compatible upload API with keys and rate limits, and a moderation queue.
 
-This is Phase 1 and Phase 2 of the spec: core upload, the public API, and the safety tooling needed before a public launch. Accounts, albums and paid plans (Phases 3 and 4) are not built yet.
+This covers Phases 1 to 2 of the spec and most of Phase 3: core upload, the public API, safety tooling, and user accounts with a personal image library and self-service API keys. Albums and paid plans are not built yet.
 
 ## What's included
 
@@ -15,7 +15,11 @@ This is Phase 1 and Phase 2 of the spec: core upload, the public API, and the sa
 | Delete links | Every upload gets a secret delete link, so guests can remove their images |
 | Expiry | 5 minutes to 6 months; a worker job removes expired and abandoned uploads every 10 minutes |
 | Safety | Magic-byte type checks (SVG and HEIC rejected), 32 MB and 100-megapixel caps, SSRF protection for URL uploads, per-IP and per-key rate limits, exact-hash block list, optional NSFW scoring hook |
-| Moderation | `/admin` (password protected): open reports, flagged images, recent uploads; remove, remove and block the file, dismiss, mark safe |
+| Accounts | Sign up and sign in with email and password (scrypt hashes, server-side sessions in httpOnly cookies, lockout after repeated wrong passwords). Uploading from the website requires an account by default |
+| My images | Every upload is saved to the uploader's library: search, copy links, open, delete |
+| API keys | Users create and revoke their own keys (shown once, stored hashed). Images uploaded with a key land in the owner's library |
+| Settings | Change name and password (signs out other devices), sign out everywhere |
+| Moderation | `/admin` for admin accounts: open reports, flagged images, recent uploads, users; remove, remove and block the file, dismiss, mark safe, suspend a user (which also revokes their keys and sessions) |
 
 Stack: Next.js 16, Postgres, Redis with BullMQ, S3-compatible storage (MinIO in Docker, or Cloudflare R2), sharp, Caddy for HTTPS.
 
@@ -29,7 +33,7 @@ You need a server with Docker, ports 80 and 443 open, and three DNS records poin
 
 ```bash
 cp .env.example .env
-# Edit .env: domains, POSTGRES_PASSWORD, S3 keys, ADMIN_PASSWORD, ABUSE_EMAIL
+# Edit .env: domains, POSTGRES_PASSWORD, S3 keys, ADMIN_EMAILS, ABUSE_EMAIL
 docker compose up -d --build
 docker compose logs -f app worker
 ```
@@ -40,7 +44,11 @@ Caddy gets HTTPS certificates automatically on first request. The database schem
 docker compose exec app node dist/migrate.js
 ```
 
-### Issue an API key
+### Accounts and API keys
+
+Create an account on the site with an email listed in `ADMIN_EMAILS`; that account can open `/admin`. Other people sign up themselves and create API keys under **API keys**. To close sign-ups, set `ALLOW_SIGNUP=false`. To let people upload without an account, set `REQUIRE_LOGIN_TO_UPLOAD=false` (the API always needs a key).
+
+You can also issue a key from the command line:
 
 ```bash
 docker compose exec app node dist/create-api-key.js you@example.com "n8n automations" 500
@@ -84,7 +92,7 @@ npm install
 export DATABASE_URL=postgres://imghost:imghost@localhost:5432/imghost
 export REDIS_URL=redis://localhost:6379
 export S3_ENDPOINT=http://localhost:9000 S3_ACCESS_KEY_ID=... S3_SECRET_ACCESS_KEY=... S3_BUCKET=imghost
-export ADMIN_PASSWORD=dev TRUST_PROXY=false
+export ADMIN_EMAILS=you@example.com TRUST_PROXY=false
 npm run migrate
 npm run dev          # web app on http://localhost:3000
 npm run worker:dev   # image processing worker, in a second terminal
@@ -118,11 +126,14 @@ app/                Next.js routes
   page.tsx            uploader
   [id]/               viewer page and delete page
   i/[id]/[...path]/   serves image bytes (original, t/ thumb, m/ medium)
-  admin/              moderation queue (Basic auth via proxy.ts)
+  login/, signup/     sign-in and sign-up pages
+  account/            My images, API keys, settings
+  actions/            server actions for auth and account changes
+  admin/              moderation queue (admin accounts only)
   api/1/              public API
   api/internal/       browser upload flow
-components/         Uploader, ShareCodes, ReportForm
-lib/                config, db, s3, queue, rate limit, processing, moderation, links
+components/         Uploader, ShareCodes, ImageTile, KeyCreator, AccountMenu, Toast and forms
+lib/                config, db, s3, queue, rate limit, processing, moderation, links, auth, password
 worker/worker.ts    BullMQ worker: processing and cleanup
 scripts/            migrate, create-api-key, setup-bucket
 db/schema.sql       database schema (idempotent)
@@ -131,7 +142,8 @@ deploy/Caddyfile    HTTPS reverse proxy for the three hostnames
 
 ## Not built yet
 
-- User accounts, sign-up and login; albums and private images (schema has the tables)
-- Self-service API key dashboard (keys are issued with the script for now)
+- Email verification and password reset by email (needs an email provider; an admin can suspend accounts meanwhile)
+- Sign-in with Google or another identity provider
+- Albums and private images (the schema has the tables)
 - Client-side resize before upload, HEIC support
 - Paid plans, custom domains, viewer-page ads, usage analytics

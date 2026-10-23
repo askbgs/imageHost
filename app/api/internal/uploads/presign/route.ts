@@ -1,9 +1,9 @@
 import { config } from "@/lib/config";
 import { ACCEPTED_MIME } from "@/lib/filetype";
-import { ApiError, apiOk, clientIp, handleError, limitHeaders } from "@/lib/http";
+import { ApiError, apiOk, handleError } from "@/lib/http";
 import { createPendingImage, parseExpiration } from "@/lib/images";
-import { rateLimit } from "@/lib/ratelimit";
 import { presignPut } from "@/lib/s3";
+import { webUploadGate } from "@/lib/webupload";
 
 export const runtime = "nodejs";
 
@@ -27,11 +27,8 @@ export async function POST(req: Request) {
     }
     const expirationSeconds = parseExpiration(body.expiration);
 
-    const ip = clientIp(req);
-    const rl = await rateLimit(`rl:guest:${ip ?? "unknown"}`, config.limits.guestUploadsPerHour);
-    if (!rl.ok) throw new ApiError("rate_limited", "Too many uploads, try again later", limitHeaders(rl));
-
-    const img = await createPendingImage({ name: body.name ?? null, expirationSeconds, uploaderIp: ip });
+    const { user, ip } = await webUploadGate(req);
+    const img = await createPendingImage({ name: body.name ?? null, expirationSeconds, uploaderIp: ip, userId: user?.id });
     const uploadUrl = await presignPut(img.upload_key, type, size);
 
     // The delete token doubles as proof of ownership for the complete call.

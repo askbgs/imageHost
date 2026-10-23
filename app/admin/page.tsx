@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { revalidatePath } from "next/cache";
+import { requireAdmin } from "@/lib/auth";
 import { REPORT_LABELS, type ReportReason } from "@/lib/constants";
 import { query } from "@/lib/db";
 import { IMAGE_ID_RE } from "@/lib/ids";
@@ -23,6 +24,7 @@ type ReportRow = {
 
 async function removeAction(formData: FormData) {
   "use server";
+  await requireAdmin();
   const id = String(formData.get("image_id") || "");
   const block = formData.get("block") === "1";
   const img = IMAGE_ID_RE.test(id) ? await getImage(id) : null;
@@ -35,6 +37,7 @@ async function removeAction(formData: FormData) {
 
 async function dismissAction(formData: FormData) {
   "use server";
+  await requireAdmin();
   const id = String(formData.get("image_id") || "");
   await query(`UPDATE reports SET status = 'dismissed' WHERE image_id = $1 AND status = 'open'`, [id]);
   revalidatePath("/admin");
@@ -42,6 +45,7 @@ async function dismissAction(formData: FormData) {
 
 async function unflagAction(formData: FormData) {
   "use server";
+  await requireAdmin();
   const id = String(formData.get("image_id") || "");
   await query(`UPDATE images SET status = 'active' WHERE id = $1 AND status = 'flagged'`, [id]);
   revalidatePath("/admin");
@@ -83,7 +87,24 @@ function Actions({ imageId, report, flagged }: { imageId: string; report?: boole
   );
 }
 
+async function setUserStatus(formData: FormData) {
+  "use server";
+  const admin = await requireAdmin();
+  const id = String(formData.get("user_id") || "");
+  const status = formData.get("status") === "suspended" ? "suspended" : "active";
+  if (id === admin.id) return; // never lock yourself out
+  await query(`UPDATE users SET status = $2 WHERE id = $1`, [id, status]);
+  if (status === "suspended") {
+    await query(`DELETE FROM sessions WHERE user_id = $1`, [id]);
+    await query(`UPDATE api_keys SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL`, [id]);
+  }
+  revalidatePath("/admin");
+}
+
+type UserRow = { id: string; email: string; display_name: string | null; role: string; status: string; created_at: Date; images: string; keys: string };
+
 export default async function AdminPage({ searchParams }: { searchParams: Promise<{ view?: string }> }) {
+  const admin = await requireAdmin();
   const { view = "reports" } = await searchParams;
 
   const reports =
@@ -98,8 +119,18 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
         )
       : [];
 
+  const users =
+    view === "users"
+      ? await query<UserRow>(
+          `SELECT u.id, u.email, u.display_name, u.role, u.status, u.created_at,
+                  (SELECT count(*) FROM images i WHERE i.user_id = u.id AND i.status IN ('active','flagged')) AS images,
+                  (SELECT count(*) FROM api_keys k WHERE k.user_id = u.id AND k.revoked_at IS NULL) AS keys
+             FROM users u ORDER BY u.created_at DESC LIMIT 200`,
+        )
+      : [];
+
   const images =
-    view !== "reports"
+    view === "flagged" || view === "recent"
       ? await query<ImageRow>(
           `SELECT * FROM images WHERE status = ANY($1) ORDER BY created_at DESC LIMIT 100`,
           [view === "flagged" ? ["flagged"] : ["active", "flagged"]],
@@ -114,13 +145,15 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
 
   return (
     <div style={{ display: "grid", gap: 24 }}>
-      <div className="prose">
-        <h1 style={{ marginBottom: 8 }}>Moderation</h1>
-        <p style={{ margin: 0 }}>
+      <div className="page-head" style={{ paddingBottom: 0 }}>
+        <div>
+        <h1>Moderation</h1>
+        <p>
           {counts?.open} open report{counts?.open === "1" ? "" : "s"}, {counts?.flagged} flagged, {counts?.total} live images.
         </p>
+        </div>
       </div>
-      <nav className="code-tabs" aria-label="Moderation views">
+      <nav className="segmented" aria-label="Moderation views">
         <Link href="/admin?view=reports" aria-current={view === "reports" ? "page" : undefined}>
           Open reports
         </Link>
@@ -130,13 +163,16 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
         <Link href="/admin?view=recent" aria-current={view === "recent" ? "page" : undefined}>
           Recent uploads
         </Link>
+        <Link href="/admin?view=users" aria-current={view === "users" ? "page" : undefined}>
+          Users
+        </Link>
       </nav>
 
       {view === "reports" &&
         (reports.length === 0 ? (
           <p>No open reports.</p>
         ) : (
-          <table className="table">
+          <div className="table-scroll"><table className="table">
             <thead>
               <tr>
                 <th>Image</th>
@@ -168,14 +204,56 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
                 );
               })}
             </tbody>
-          </table>
+          </table></div>
         ))}
 
-      {view !== "reports" &&
+      {view === "users" && (
+        <div className="table-scroll"><table className="table">
+          <thead>
+            <tr>
+              <th>Account</th>
+              <th>Images</th>
+              <th>API keys</th>
+              <th>Joined</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {users.map((u) => (
+              <tr key={u.id}>
+                <td>
+                  <strong>{u.display_name || u.email}</strong>
+                  <div className="detail">
+                    {u.email}
+                    {u.role === "admin" ? ", admin" : ""}
+                    {u.status !== "active" ? `, ${u.status}` : ""}
+                  </div>
+                </td>
+                <td>{u.images}</td>
+                <td>{u.keys}</td>
+                <td>{new Date(u.created_at).toLocaleDateString("en-GB")}</td>
+                <td>
+                  {u.id !== admin.id && (
+                    <form action={setUserStatus}>
+                      <input type="hidden" name="user_id" value={u.id} />
+                      <input type="hidden" name="status" value={u.status === "active" ? "suspended" : "active"} />
+                      <button className={`btn small ${u.status === "active" ? "danger" : "secondary"}`} type="submit">
+                        {u.status === "active" ? "Suspend" : "Reactivate"}
+                      </button>
+                    </form>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table></div>
+      )}
+
+      {(view === "flagged" || view === "recent") &&
         (images.length === 0 ? (
           <p>Nothing here.</p>
         ) : (
-          <table className="table">
+          <div className="table-scroll"><table className="table">
             <thead>
               <tr>
                 <th>Image</th>
@@ -208,7 +286,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
                 );
               })}
             </tbody>
-          </table>
+          </table></div>
         ))}
     </div>
   );

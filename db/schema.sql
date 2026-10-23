@@ -91,3 +91,19 @@ CREATE INDEX IF NOT EXISTS idx_images_expires ON images (expires_at) WHERE expir
 CREATE INDEX IF NOT EXISTS idx_images_sha256  ON images (sha256);
 CREATE INDEX IF NOT EXISTS idx_images_stale   ON images (created_at) WHERE status = 'pending';
 CREATE INDEX IF NOT EXISTS idx_reports_open   ON reports (status, created_at) WHERE status = 'open';
+
+-- ---- Accounts (v2) ----
+ALTER TABLE users ADD COLUMN IF NOT EXISTS display_name TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'user';   -- user | admin
+ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMPTZ;
+
+CREATE TABLE IF NOT EXISTS sessions (
+  id           TEXT PRIMARY KEY,                  -- SHA-256 of the cookie token
+  user_id      UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  last_seen_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  expires_at   TIMESTAMPTZ NOT NULL,
+  user_agent   TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions (user_id);
+CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions (expires_at);

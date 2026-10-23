@@ -1,5 +1,10 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import Link from "next/link";
+import { AccountMenu } from "@/components/AccountMenu";
+import { LogoMark } from "@/components/Icons";
+import { NavLinks } from "@/components/NavLinks";
+import { ToastProvider } from "@/components/Toast";
+import { currentUser, displayName } from "@/lib/auth";
 import { config } from "@/lib/config";
 import "./globals.css";
 
@@ -9,12 +14,20 @@ export const dynamic = "force-dynamic";
 export function generateMetadata(): Metadata {
   return {
     metadataBase: new URL(config.siteUrl),
-    title: { default: `${config.siteName} · Free image hosting`, template: `%s · ${config.siteName}` },
+    title: { default: `${config.siteName}: image hosting with direct links`, template: `%s · ${config.siteName}` },
     description: `Upload images and get direct links, HTML and BBCode embeds. Up to ${config.maxUploadBytes / 1024 / 1024} MB per image.`,
   };
 }
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#e9edf0" },
+    { media: "(prefers-color-scheme: dark)", color: "#121619" },
+  ],
+};
+
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const user = await currentUser();
   return (
     <html lang="en">
       <head>
@@ -22,30 +35,53 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
         <link
           rel="stylesheet"
-          href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=Instrument+Sans:wght@400;600&display=swap"
+          href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=Instrument+Sans:wght@400;500;600&display=swap"
         />
       </head>
       <body>
-        <header className="site-header">
-          <div className="wrap">
-            <Link href="/" className="wordmark">
-              {config.siteName}
-            </Link>
-            <nav className="site-nav" aria-label="Main">
+        <ToastProvider>
+          <a href="#main" className="skip">
+            Skip to content
+          </a>
+          <header className="site-header">
+            <div className="wrap header-row">
+              <Link href="/" className="wordmark" aria-label={`${config.siteName} home`}>
+                <LogoMark />
+                <span>{config.siteName}</span>
+              </Link>
+              <NavLinks signedIn={!!user} />
+              <div className="header-account">
+                {user ? (
+                  <AccountMenu name={displayName(user)} email={user.email} isAdmin={user.role === "admin"} />
+                ) : (
+                  <>
+                    <Link href="/login" className="btn ghost">
+                      Sign in
+                    </Link>
+                    {config.allowSignup && (
+                      <Link href="/signup" className="btn">
+                        Create account
+                      </Link>
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
+          </header>
+          <main id="main" className="wrap">
+            {children}
+          </main>
+          <footer className="site-footer">
+            <div className="wrap footer-row">
+              <span className="footer-brand">
+                <LogoMark size={16} /> {config.siteName}
+              </span>
               <Link href="/api-docs">API</Link>
               <Link href="/terms">Terms</Link>
-            </nav>
-          </div>
-        </header>
-        <main className="wrap">{children}</main>
-        <footer className="site-footer">
-          <div className="wrap">
-            <span>{config.siteName}</span>
-            <Link href="/terms">Terms of service</Link>
-            <Link href="/abuse">Report abuse</Link>
-            <Link href="/api-docs">API</Link>
-          </div>
-        </footer>
+              <Link href="/abuse">Report abuse</Link>
+            </div>
+          </footer>
+        </ToastProvider>
       </body>
     </html>
   );

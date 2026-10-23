@@ -2,7 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { EXPIRY_OPTIONS } from "@/lib/constants";
-import { ShareCodes, type Codes } from "./ShareCodes";
+import { IconCheck, IconCopy, IconOpen, IconUpload, IconX } from "./Icons";
+import { FORMATS, ShareCodes, type Codes } from "./ShareCodes";
+import { useCopy } from "./Toast";
 
 type UploadData = {
   id: string;
@@ -113,6 +115,8 @@ export function Uploader({ maxBytes, mode }: { maxBytes: number; mode: "direct" 
   const active = useRef(0);
   const expirationRef = useRef(0);
   expirationRef.current = expiration;
+  const copy = useCopy();
+  const [batchFormat, setBatchFormat] = useState<keyof Codes>("direct");
 
   const patch = useCallback((key: string, p: Partial<Item>) => {
     setItems((list) => list.map((it) => (it.key === key ? { ...it, ...p } : it)));
@@ -279,21 +283,36 @@ export function Uploader({ maxBytes, mode }: { maxBytes: number; mode: "direct" 
     setUrl("");
   }
 
-  const doneCount = items.filter((i) => i.state === "done").length;
+  const done = items.filter((i) => i.state === "done" && i.data);
+  const busy = items.some((i) => i.state === "queued" || i.state === "uploading" || i.state === "processing");
 
-  async function copyAll() {
-    const lines = items.filter((i) => i.data).map((i) => i.data!.url);
-    await navigator.clipboard.writeText(lines.join("\n")).catch(() => {});
+  function copyAll() {
+    const f = FORMATS.find((x) => x.key === batchFormat)!;
+    copy(done.map((i) => toCodes(i.data!)[batchFormat]).join("\n"), `${done.length} × ${f.what}`);
+  }
+
+  function retry(it: Item) {
+    if (!it.file && !it.url) return;
+    patch(it.key, { state: "queued", progress: 0, error: undefined });
+  }
+
+  function remove(key: string) {
+    setItems((list) => list.filter((i) => i.key !== key));
   }
 
   return (
     <>
       <section className="frame" aria-label="Upload images">
         <span className="marks" aria-hidden="true" />
-        <p className="hint">Drop images here, or anywhere on the page</p>
-        <p className="sub">You can also paste with Ctrl+V or ⌘V. Up to {formatBytes(maxBytes)} per image.</p>
+        <span className="drop-icon" aria-hidden="true">
+          <IconUpload size={26} />
+        </span>
+        <p className="hint">Drop images anywhere on this page</p>
+        <p className="sub">
+          Or paste with <kbd>Ctrl</kbd> <kbd>V</kbd>. JPG, PNG, GIF, WebP, AVIF up to {formatBytes(maxBytes)} each.
+        </p>
         <div className="controls">
-          <button type="button" className="btn" onClick={() => fileInput.current?.click()}>
+          <button type="button" className="btn primary" onClick={() => fileInput.current?.click()}>
             Choose images
           </button>
           <label className="inline">
@@ -307,6 +326,7 @@ export function Uploader({ maxBytes, mode }: { maxBytes: number; mode: "direct" 
             </select>
           </label>
         </div>
+        <div className="divider-or">or import from a link</div>
         <form className="url-row" onSubmit={addUrl}>
           <label htmlFor="image-url" className="sr-only">
             Image URL
@@ -314,12 +334,12 @@ export function Uploader({ maxBytes, mode }: { maxBytes: number; mode: "direct" 
           <input
             id="image-url"
             type="url"
-            placeholder="Or paste an image URL"
+            placeholder="https://example.com/photo.jpg"
             value={url}
             onChange={(e) => setUrl(e.target.value)}
           />
-          <button type="submit" className="btn secondary">
-            Upload URL
+          <button type="submit" className="btn secondary" disabled={!/^https?:\/\/./i.test(url.trim())}>
+            Import
           </button>
         </form>
         <input
@@ -336,15 +356,41 @@ export function Uploader({ maxBytes, mode }: { maxBytes: number; mode: "direct" 
       </section>
 
       {items.length > 0 && (
-        <section className="sheet" aria-live="polite">
+        <section className="sheet" aria-label="Your uploads">
           <div className="sheet-head">
-            <h2>Your uploads</h2>
-            {doneCount > 1 && (
-              <button type="button" className="btn secondary small" onClick={copyAll}>
-                Copy all direct links
-              </button>
-            )}
+            <h2>
+              {busy ? "Uploading…" : `${done.length} image${done.length === 1 ? "" : "s"} ready`}
+            </h2>
+            <div className="sheet-tools">
+              {done.length > 1 && (
+                <>
+                  <label className="sr-only" htmlFor="batch-format">
+                    Format for copying all
+                  </label>
+                  <select id="batch-format" value={batchFormat} onChange={(e) => setBatchFormat(e.target.value as keyof Codes)}>
+                    {FORMATS.map((f) => (
+                      <option key={f.key} value={f.key}>
+                        {f.label}
+                      </option>
+                    ))}
+                  </select>
+                  <button type="button" className="btn secondary small" onClick={copyAll}>
+                    <IconCopy size={15} /> Copy all {done.length}
+                  </button>
+                </>
+              )}
+              {!busy && (
+                <button
+                  type="button"
+                  className="btn ghost small"
+                  onClick={() => setItems((l) => l.filter((i) => i.state !== "done" && i.state !== "error"))}
+                >
+                  Clear list
+                </button>
+              )}
+            </div>
           </div>
+
           {items.map((it, idx) => (
             <article className="shot" key={it.key}>
               <div className="thumb checker">
@@ -358,14 +404,32 @@ export function Uploader({ maxBytes, mode }: { maxBytes: number; mode: "direct" 
                 <span className="frame-no">{String(items.length - idx).padStart(2, "0")}</span>
               </div>
               <div className="meta">
-                <div>
-                  <div className="name">{it.data?.title || it.name}</div>
-                  <div className="detail">
-                    {it.data
-                      ? `${it.data.width} × ${it.data.height} · ${formatBytes(it.data.size)}`
-                      : it.size
-                        ? formatBytes(it.size)
-                        : "From URL"}
+                <div className="shot-top">
+                  <div style={{ minWidth: 0 }}>
+                    <div className="name">{it.data?.title || it.name}</div>
+                    <Status it={it} />
+                  </div>
+                  <div className="shot-actions">
+                    {it.data && (
+                      <>
+                        <button type="button" className="btn primary small" onClick={() => copy(it.data!.url, "Direct link")}>
+                          <IconCopy size={15} /> Copy link
+                        </button>
+                        <a className="btn secondary small icon" href={it.data.url_viewer} target="_blank" rel="noreferrer" aria-label="Open viewer page" title="Open viewer page">
+                          <IconOpen size={16} />
+                        </a>
+                      </>
+                    )}
+                    {it.state === "error" && (it.file || it.url) && (
+                      <button type="button" className="btn secondary small" onClick={() => retry(it)}>
+                        Try again
+                      </button>
+                    )}
+                    {(it.state === "error" || it.state === "done") && (
+                      <button type="button" className="btn ghost small icon" onClick={() => remove(it.key)} aria-label="Remove from list" title="Remove from list">
+                        <IconX size={16} />
+                      </button>
+                    )}
                   </div>
                 </div>
                 {(it.state === "queued" || it.state === "uploading") && (
@@ -373,21 +437,16 @@ export function Uploader({ maxBytes, mode }: { maxBytes: number; mode: "direct" 
                     <span style={{ width: `${Math.round(it.progress * 100)}%` }} />
                   </div>
                 )}
-                {it.state === "queued" && <div className="detail">Waiting to upload</div>}
-                {it.state === "processing" && <div className="detail">Processing image…</div>}
-                {it.state === "error" && <div className="error">{it.error}</div>}
                 {it.data && (
                   <>
-                    {it.data.status === "flagged" && (
-                      <div className="detail">This image was flagged as sensitive and is blurred on its viewer page.</div>
-                    )}
                     <ShareCodes codes={toCodes(it.data)} />
                     {it.data.delete_url && (
-                      <div className="detail">
-                        Delete link (save it; it is shown only now):{" "}
-                        <a href={it.data.delete_url} target="_blank" rel="noreferrer">
-                          {it.data.delete_url}
-                        </a>
+                      <div className="delete-note">
+                        <span>Delete link:</span>
+                        <code>{it.data.delete_url}</code>
+                        <button type="button" className="btn ghost small" onClick={() => copy(it.data!.delete_url!, "Delete link")}>
+                          Copy
+                        </button>
                       </div>
                     )}
                   </>
@@ -408,4 +467,34 @@ export function Uploader({ maxBytes, mode }: { maxBytes: number; mode: "direct" 
       )}
     </>
   );
+}
+
+function Status({ it }: { it: Item }) {
+  const size = it.data ? `${it.data.width} × ${it.data.height} · ${formatBytes(it.data.size)}` : it.size ? formatBytes(it.size) : "From a link";
+  switch (it.state) {
+    case "queued":
+      return <span className="status">Waiting · {size}</span>;
+    case "uploading":
+      return (
+        <span className="status">
+          <span className="spinner" aria-hidden="true" /> Uploading {Math.round(it.progress * 100)}% · {size}
+        </span>
+      );
+    case "processing":
+      return (
+        <span className="status">
+          <span className="spinner" aria-hidden="true" /> Processing · {size}
+        </span>
+      );
+    case "error":
+      return <span className="status err">{it.error}</span>;
+    case "done":
+      return it.data?.status === "flagged" ? (
+        <span className="status warn">Flagged as sensitive: blurred on its page · {size}</span>
+      ) : (
+        <span className="status ok">
+          <IconCheck size={15} /> Ready · {size}
+        </span>
+      );
+  }
 }

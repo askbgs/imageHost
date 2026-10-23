@@ -24,14 +24,15 @@ If you use different names, change the names inside `${{...}}` below to match.
 
 ## 3. Set the web service's variables
 
-Open **web → Variables → Raw Editor** and paste this, then set your own `ADMIN_PASSWORD` and `ABUSE_EMAIL`:
+Open **web → Variables → Raw Editor** and paste this, then set your own `ADMIN_EMAILS` and `ABUSE_EMAIL`:
 
 ```
 SITE_NAME=imghost
 SITE_URL=https://${{RAILWAY_PUBLIC_DOMAIN}}
 ABUSE_EMAIL=abuse@yoursite.com
-ADMIN_USER=admin
-ADMIN_PASSWORD=choose-a-long-password
+ADMIN_EMAILS=you@yoursite.com
+ALLOW_SIGNUP=true
+REQUIRE_LOGIN_TO_UPLOAD=true
 
 DATABASE_URL=${{Postgres.DATABASE_URL}}
 REDIS_URL=${{Redis.REDIS_URL}}
@@ -49,7 +50,7 @@ IMAGE_DELIVERY=redirect
 CLIENT_IP_HEADER=x-real-ip
 
 MAX_UPLOAD_MB=32
-GUEST_UPLOADS_PER_HOUR=30
+USER_UPLOADS_PER_HOUR=200
 REPORTS_PER_HOUR=10
 ```
 
@@ -99,18 +100,18 @@ Add `MODERATION_WEBHOOK_URL` here too if you use NSFW scoring (it runs in the wo
 Deploy both services (Railway prompts you to deploy the staged changes). Then:
 
 1. Open `https://<your-domain>/api/health`; it should return `{"ok":true}`.
-2. Upload an image on the home page and open its direct link.
+2. Create an account, upload an image on the home page, and open its direct link.
 3. Watch **worker → Deployments → Logs** for lines like `[process] aB3xK9pQ → active`.
 
-## 7. Create API keys
+## 7. Create your admin account
 
-Install the [Railway CLI](https://docs.railway.com/cli), run `railway login` and `railway link` in this folder, then:
+Open the site and choose **Create account** with the email you put in `ADMIN_EMAILS`. That account gets the **Moderation** link in its menu. Everyone else creates API keys themselves under **API keys** in their account.
+
+To issue a key from the command line instead, install the [Railway CLI](https://docs.railway.com/cli), run `railway login` and `railway link` in this folder, then:
 
 ```bash
 railway ssh --service web -- node dist/create-api-key.js you@example.com "n8n automations" 500
 ```
-
-The first `railway ssh` asks to register an SSH key.
 
 ## Custom domain
 

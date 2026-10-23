@@ -1,3 +1,4 @@
+import { assertSameOrigin } from "@/lib/auth";
 import { config } from "@/lib/config";
 import { ApiError, apiOk, handleError } from "@/lib/http";
 import { IMAGE_ID_RE, tokenMatches } from "@/lib/ids";
@@ -11,6 +12,7 @@ export const maxDuration = 90;
 /** Step 2 of a browser upload: the bytes are in storage; process them and return links. */
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
+    assertSameOrigin(req);
     const { id } = await ctx.params;
     const body = (await req.json().catch(() => ({}))) as { token?: string };
     if (!IMAGE_ID_RE.test(id)) throw new ApiError("not_found", "Unknown upload");

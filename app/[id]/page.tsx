@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { OwnerDelete } from "@/components/OwnerActions";
 import { ReportForm } from "@/components/ReportForm";
+import { currentUser } from "@/lib/auth";
 import { ShareCodes } from "@/components/ShareCodes";
 import { query } from "@/lib/db";
 import { IMAGE_ID_RE } from "@/lib/ids";
@@ -34,6 +36,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 }
 
 function formatBytes(n: number) {
+  if (n < 1024) return `${n} B`;
   if (n < 1024 * 1024) return `${Math.round(n / 1024)} KB`;
   return `${(n / 1024 / 1024).toFixed(1)} MB`;
 }
@@ -47,6 +50,8 @@ export default async function ViewerPage({ params }: Props) {
 
   const l = links(img);
   const codes = embedCodes(img);
+  const viewer = await currentUser();
+  const isOwner = !!viewer && viewer.id === img.user_id;
   const flagged = img.status === "flagged";
   const title = img.title || img.slug;
   const uploaded = new Date(img.created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
@@ -75,14 +80,15 @@ export default async function ViewerPage({ params }: Props) {
             <li>Uploaded {uploaded}</li>
             {img.expires_at && <li>Deletes {new Date(img.expires_at).toLocaleString("en-GB")}</li>}
           </ul>
-          <p style={{ display: "flex", gap: 12, flexWrap: "wrap", marginTop: 16 }}>
+          <div className="row" style={{ marginTop: 16, gap: 8 }}>
             <a className="btn secondary small" href={l.direct} target="_blank" rel="noreferrer">
               Open full size
             </a>
             <a className="btn secondary small" href={l.direct} download={img.slug}>
               Download
             </a>
-          </p>
+            {isOwner && <OwnerDelete id={img.id} />}
+          </div>
         </div>
         <div style={{ display: "grid", gap: 20 }}>
           <ShareCodes
@@ -96,7 +102,7 @@ export default async function ViewerPage({ params }: Props) {
               markdown: codes.markdown,
             }}
           />
-          <ReportForm imageId={id} />
+          {!isOwner && <ReportForm imageId={id} />}
         </div>
       </div>
     </div>

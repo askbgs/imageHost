@@ -6,6 +6,7 @@ export type ErrorCode =
   | "invalid_expiration"
   | "invalid_request"
   | "invalid_key"
+  | "unauthorized"
   | "forbidden"
   | "not_found"
   | "file_too_large"
@@ -21,6 +22,7 @@ const STATUS: Record<ErrorCode, number> = {
   invalid_expiration: 400,
   invalid_request: 400,
   invalid_key: 401,
+  unauthorized: 401,
   forbidden: 403,
   not_found: 404,
   file_too_large: 413,
@@ -71,7 +73,8 @@ export function preflight() {
   return new NextResponse(null, { status: 204, headers: corsHeaders });
 }
 
-export function clientIp(req: Request): string | null {
+export function clientIp(source: Request | Headers): string | null {
+  const req = { headers: source instanceof Headers ? source : source.headers };
   if (config.clientIpHeader) {
     const v = req.headers.get(config.clientIpHeader);
     return v ? v.split(",")[0]!.trim() : null;
