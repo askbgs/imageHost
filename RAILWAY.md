@@ -99,7 +99,7 @@ Add `MODERATION_WEBHOOK_URL` here too if you use NSFW scoring (it runs in the wo
 
 Deploy both services (Railway prompts you to deploy the staged changes). Then:
 
-1. Open `https://<your-domain>/api/health`. It should return `"ok": true` with `"schema": {"latest": 3, "applied": 3}`. If it says `tables missing or out of date`, check the web service's deploy logs for lines starting with `[migrate]`.
+1. Open `https://<your-domain>/api/health`. It should return `"ok": true` with `"schema": {"latest": 3, "applied": 3}`. If it says `tables missing or out of date`, check the web service's deploy logs for lines starting with `[migrate]`. The `browser_uploads` line should say `direct to storage`; if not, see [R2.md → Troubleshooting uploads](R2.md#troubleshooting-uploads).
 2. Prepare the bucket (CORS for browser uploads, cleanup of raw uploads): `railway ssh --service web -- node dist/setup-bucket.js`. See [R2.md](R2.md) step 5 if it can't change the settings.
 3. Create an account, upload an image on the home page, and open its direct link; it should start with your R2 domain.
 4. Watch **worker → Deployments → Logs** for lines like `[process] aB3xK9pQ → active`.

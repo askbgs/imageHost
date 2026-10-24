@@ -71,10 +71,21 @@ function putWithProgress(url: string, file: File, contentType: string, onProgres
     xhr.setRequestHeader("Content-Type", contentType);
     xhr.upload.onprogress = (e) => e.lengthComputable && onProgress(e.loaded / e.total);
     xhr.onload = () => (xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error(`Storage rejected the upload (HTTP ${xhr.status})`)));
-    xhr.onerror = () => reject(new Error("Network error while uploading"));
+    // Status 0 with no response: blocked by the browser (usually a missing CORS rule on the
+    // bucket) or the connection dropped. The caller falls back to uploading through the site.
+    xhr.onerror = () => reject(new DirectUploadBlocked());
     xhr.send(file);
   });
 }
+
+class DirectUploadBlocked extends Error {
+  constructor() {
+    super("Direct upload to storage was blocked");
+  }
+}
+
+// Once a direct upload has been blocked, send the rest of this visit's uploads through the site.
+let directBlocked = false;
 
 /** UPLOAD_MODE=server: send the file to the app, reporting progress; resolves with the JSON body. */
 function postWithProgress(file: File, expiration: number, onProgress: (p: number) => void) {
@@ -91,7 +102,9 @@ function postWithProgress(file: File, expiration: number, onProgress: (p: number
       if (xhr.status === 200 || xhr.status === 202) resolve(body);
       else reject(new Error(body?.error?.message || `Upload failed (HTTP ${xhr.status})`));
     };
-    xhr.onerror = () => reject(new Error("Network error while uploading"));
+    xhr.onerror = () =>
+      reject(new Error("Couldn't reach the server. Check your connection and try again."));
+    xhr.ontimeout = xhr.onerror;
     xhr.send(form);
   });
 }
@@ -137,37 +150,56 @@ export function Uploader({ maxBytes, mode }: { maxBytes: number; mode: "direct" 
             }),
           );
           data = body.data;
-        } else if (mode === "server") {
-          const file = item.file!;
-          const done = await postWithProgress(file, item.expiration, (progress) =>
-            patch(item.key, { progress, ...(progress >= 1 ? { state: "processing" } : {}) }),
-          );
-          if (done.status === 202) {
-            const token = done.data.delete_url?.split("/").pop() ?? "";
-            data = await pollUntilDone(done.data.id, token);
-          } else {
-            data = done.data;
-          }
         } else {
           const file = item.file!;
-          const presign = await readJson(
-            await fetch("/api/internal/uploads/presign", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ name: file.name, size: file.size, type: file.type, expiration: item.expiration }),
-            }),
-          );
-          const p = presign.data as unknown as { id: string; token: string; upload_url: string };
-          await putWithProgress(p.upload_url, file, file.type, (progress) => patch(item.key, { progress }));
-          patch(item.key, { state: "processing", progress: 1 });
-          const done = await readJson(
-            await fetch(`/api/internal/uploads/${p.id}/complete`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ token: p.token }),
-            }),
-          );
-          data = done.status === 202 ? await pollUntilDone(p.id, p.token) : done.data;
+          const viaSite = async () => {
+            patch(item.key, { state: "uploading", progress: 0 });
+            const done = await postWithProgress(file, item.expiration, (progress) =>
+              patch(item.key, { progress, ...(progress >= 1 ? { state: "processing" } : {}) }),
+            );
+            if (done.status === 202) {
+              const token = done.data.delete_url?.split("/").pop() ?? "";
+              return pollUntilDone(done.data.id, token);
+            }
+            return done.data;
+          };
+
+          if (mode === "server" || directBlocked) {
+            data = await viaSite();
+          } else {
+            const presign = await readJson(
+              await fetch("/api/internal/uploads/presign", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ name: file.name, size: file.size, type: file.type, expiration: item.expiration }),
+              }),
+            );
+            const p = presign.data as unknown as { id: string; token: string; upload_url: string };
+            try {
+              await putWithProgress(p.upload_url, file, file.type, (progress) => patch(item.key, { progress }));
+            } catch (err) {
+              if (!(err instanceof DirectUploadBlocked)) throw err;
+              directBlocked = true;
+              console.warn(
+                "Direct upload to storage was blocked; uploading through the site instead. " +
+                  "Add a CORS rule on the bucket for this site's address (see R2.md, step 5).",
+              );
+              p.upload_url = "";
+            }
+            if (p.upload_url) {
+              patch(item.key, { state: "processing", progress: 1 });
+              const done = await readJson(
+                await fetch(`/api/internal/uploads/${p.id}/complete`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ token: p.token }),
+                }),
+              );
+              data = done.status === 202 ? await pollUntilDone(p.id, p.token) : done.data;
+            } else {
+              data = await viaSite();
+            }
+          }
         }
         patch(item.key, { state: "done", data, file: undefined });
       } catch (err) {

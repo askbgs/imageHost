@@ -8,12 +8,12 @@ export const runtime = "nodejs";
 export const maxDuration = 90;
 
 /**
- * Web uploader when UPLOAD_MODE=server: the browser POSTs the file here and the app stores it.
- * Used where browsers cannot PUT to storage directly (no bucket CORS).
+ * Web uploader through the site: the browser POSTs the file here and the app stores it.
+ * Used with UPLOAD_MODE=server, and as the fallback when a direct upload to the bucket is
+ * blocked by the browser (for example a missing CORS rule).
  */
 export async function POST(req: Request) {
   try {
-    if (config.uploadMode !== "server") throw new ApiError("not_found", "Not available");
     const declared = Number(req.headers.get("content-length") || 0);
     if (declared > config.maxUploadBytes + 64 * 1024) {
       throw new ApiError("file_too_large", `Images must be ${config.maxUploadBytes / 1024 / 1024} MB or smaller`);

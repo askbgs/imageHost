@@ -2,6 +2,7 @@ import {
   CreateBucketCommand,
   DeleteObjectCommand,
   DeleteObjectsCommand,
+  GetBucketCorsCommand,
   PutBucketLifecycleConfigurationCommand,
   HeadBucketCommand,
   PutBucketCorsCommand,
@@ -204,4 +205,38 @@ export function sourceClient(opts: {
     responseChecksumValidation: "WHEN_REQUIRED",
     credentials: { accessKeyId: opts.accessKeyId, secretAccessKey: opts.secretAccessKey },
   });
+}
+
+/**
+ * Can browsers on `origin` upload straight to the bucket? Reads the bucket's CORS rules.
+ * "unknown" when the token isn't allowed to read bucket settings.
+ */
+export async function storageStatus(origin: string): Promise<{ bucket: "ok" | string; cors: "ok" | "missing" | "unknown"; corsOrigins: string[] }> {
+  let bucket = "ok";
+  try {
+    await s3.send(new HeadBucketCommand({ Bucket }));
+  } catch (err) {
+    const e = err as { name?: string; $metadata?: { httpStatusCode?: number }; message?: string };
+    const code = e.$metadata?.httpStatusCode;
+    bucket = code === 404 ? `bucket "${Bucket}" not found` : code === 403 ? "access denied (check the storage keys)" : `unreachable: ${e.name || e.message}`;
+  }
+  try {
+    const res = await s3.send(new GetBucketCorsCommand({ Bucket }));
+    const rules = res.CORSRules ?? [];
+    const origins = rules.flatMap((r) => r.AllowedOrigins ?? []);
+    const ok = rules.some(
+      (r) =>
+        (r.AllowedOrigins ?? []).some((o) => o === "*" || o.replace(/\/$/, "") === origin) &&
+        (r.AllowedMethods ?? []).map((m) => m.toUpperCase()).includes("PUT") &&
+        (r.AllowedHeaders ?? []).some((h) => h === "*" || h.toLowerCase() === "content-type"),
+    );
+    return { bucket, cors: ok ? "ok" : "missing", corsOrigins: origins };
+  } catch (err) {
+    const e = err as { name?: string; $metadata?: { httpStatusCode?: number } };
+    // No CORS configuration at all comes back as an error (NoSuchCORSConfiguration).
+    if (e.name === "NoSuchCORSConfiguration" || e.$metadata?.httpStatusCode === 404) {
+      return { bucket, cors: "missing", corsOrigins: [] };
+    }
+    return { bucket, cors: "unknown", corsOrigins: [] };
+  }
 }
