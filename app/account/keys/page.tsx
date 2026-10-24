@@ -4,7 +4,7 @@ import { KeyCreator } from "@/components/KeyCreator";
 import { requireUser } from "@/lib/auth";
 import { config } from "@/lib/config";
 import { query, queryOne } from "@/lib/db";
-import { apiRateKey, planFor } from "@/lib/plans";
+import { apiRateKey, planFor, webRateKey } from "@/lib/plans";
 import { rateUsage } from "@/lib/ratelimit";
 
 export const metadata = { title: "API keys" };
@@ -19,11 +19,19 @@ type KeyRow = {
   uploads: string;
 };
 
-const fmt = (d: Date) => new Date(d).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+const fmt = (d: Date) =>
+  new Date(d).toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
 
 export default async function KeysPage() {
   const user = await requireUser("/account/keys");
-  const account = await queryOne<{ plan: string; role: string }>(`SELECT plan, role FROM users WHERE id = $1`, [user.id]);
+  const account = await queryOne<{ plan: string; role: string }>(
+    `SELECT plan, role FROM users WHERE id = $1`,
+    [user.id],
+  );
   const plan = planFor(account ?? {});
   const keys = await query<KeyRow>(
     `SELECT k.id, k.name, k.key_prefix, k.created_at, k.last_used_at,
@@ -33,9 +41,19 @@ export default async function KeysPage() {
       ORDER BY k.created_at DESC`,
     [user.id],
   );
-  const usage = await rateUsage(apiRateKey(user.id)).catch(() => ({ used: 0, resetIn: 0 }));
+  const none = { used: 0, resetIn: 0 };
+  const [usage, webUsage] = await Promise.all([
+    rateUsage(apiRateKey(user.id)).catch(() => none),
+    rateUsage(webRateKey(user.id)).catch(() => none),
+  ]);
   const used = Math.min(usage.used, plan.apiUploadsPerHour);
-  const pct = plan.apiUploadsPerHour ? Math.round((used / plan.apiUploadsPerHour) * 100) : 100;
+  const pct = plan.apiUploadsPerHour
+    ? Math.round((used / plan.apiUploadsPerHour) * 100)
+    : 100;
+  const webUsed = Math.min(webUsage.used, plan.webUploadsPerHour);
+  const webPct = plan.webUploadsPerHour
+    ? Math.round((webUsed / plan.webUploadsPerHour) * 100)
+    : 100;
   const atKeyLimit = keys.length >= plan.maxApiKeys;
 
   const limitNote = atKeyLimit
@@ -50,7 +68,8 @@ export default async function KeysPage() {
         <div>
           <h1>API keys</h1>
           <p>
-            Upload from scripts, ShareX, WordPress or n8n. Images uploaded with a key appear in My images. See the{" "}
+            Upload from scripts, ShareX, WordPress or n8n. Images uploaded with
+            a key appear in My images. See the{" "}
             <Link href="/api-docs">API docs</Link>.
           </p>
         </div>
@@ -61,8 +80,11 @@ export default async function KeysPage() {
           <div>
             <span className="plan-badge">{plan.label} plan</span>
             <p className="detail" style={{ margin: "8px 0 0" }}>
-              {plan.maxApiKeys} API key{plan.maxApiKeys === 1 ? "" : "s"} · {plan.apiUploadsPerHour.toLocaleString("en")} API
-              uploads per hour, shared by all your keys
+              {plan.maxApiKeys} API key{plan.maxApiKeys === 1 ? "" : "s"} ·{" "}
+              {plan.apiUploadsPerHour.toLocaleString("en")} API uploads per
+              hour, shared by all your keys ·{" "}
+              {plan.webUploadsPerHour.toLocaleString("en")} website uploads per
+              hour
             </p>
           </div>
           {plan.id !== "business" && (
@@ -74,7 +96,7 @@ export default async function KeysPage() {
         <div className="meters">
           <div className="meter">
             <div className="meter-label">
-              <span>Uploads this hour</span>
+              <span>API uploads this hour</span>
               <strong>
                 {used} of {plan.apiUploadsPerHour.toLocaleString("en")}
               </strong>
@@ -90,7 +112,34 @@ export default async function KeysPage() {
               <span style={{ width: `${pct}%` }} />
             </div>
             {pct >= 100 && usage.resetIn > 0 && (
-              <span className="meter-hint">Limit reached. More uploads free up in {Math.ceil(usage.resetIn / 60)} min.</span>
+              <span className="meter-hint">
+                Limit reached. More uploads free up in{" "}
+                {Math.ceil(usage.resetIn / 60)} min.
+              </span>
+            )}
+          </div>
+          <div className="meter">
+            <div className="meter-label">
+              <span>Website uploads this hour</span>
+              <strong>
+                {webUsed} of {plan.webUploadsPerHour.toLocaleString("en")}
+              </strong>
+            </div>
+            <div
+              className={`meter-bar${webPct >= 100 ? " full" : webPct >= 80 ? " high" : ""}`}
+              role="progressbar"
+              aria-valuemin={0}
+              aria-valuemax={plan.webUploadsPerHour}
+              aria-valuenow={webUsed}
+              aria-label="Website uploads this hour"
+            >
+              <span style={{ width: `${webPct}%` }} />
+            </div>
+            {webPct >= 100 && webUsage.resetIn > 0 && (
+              <span className="meter-hint">
+                Limit reached. More uploads free up in{" "}
+                {Math.ceil(webUsage.resetIn / 60)} min.
+              </span>
             )}
           </div>
           <div className="meter">
@@ -100,8 +149,15 @@ export default async function KeysPage() {
                 {keys.length} of {plan.maxApiKeys}
               </strong>
             </div>
-            <div className={`meter-bar${atKeyLimit ? " full-quiet" : ""}`} aria-hidden="true">
-              <span style={{ width: `${Math.min(100, (keys.length / Math.max(1, plan.maxApiKeys)) * 100)}%` }} />
+            <div
+              className={`meter-bar${atKeyLimit ? " full-quiet" : ""}`}
+              aria-hidden="true"
+            >
+              <span
+                style={{
+                  width: `${Math.min(100, (keys.length / Math.max(1, plan.maxApiKeys)) * 100)}%`,
+                }}
+              />
             </div>
           </div>
         </div>
@@ -131,8 +187,11 @@ export default async function KeysPage() {
                   <strong>{k.name || "Unnamed key"}</strong>
                   <code>{k.key_prefix}…</code>
                   <div className="detail">
-                    Created {fmt(k.created_at)} · {k.last_used_at ? `last used ${fmt(k.last_used_at)}` : "never used"} ·{" "}
-                    {k.uploads} upload{k.uploads === "1" ? "" : "s"}
+                    Created {fmt(k.created_at)} ·{" "}
+                    {k.last_used_at
+                      ? `last used ${fmt(k.last_used_at)}`
+                      : "never used"}{" "}
+                    · {k.uploads} upload{k.uploads === "1" ? "" : "s"}
                   </div>
                 </div>
                 <form action={revokeApiKey}>

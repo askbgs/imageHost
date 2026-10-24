@@ -17,7 +17,13 @@ type UploadData = {
   status: string;
   thumb: { url: string };
   delete_url?: string;
-  embed: { html: string; html_full: string; bbcode: string; bbcode_full: string; markdown: string };
+  embed: {
+    html: string;
+    html_full: string;
+    bbcode: string;
+    bbcode_full: string;
+    markdown: string;
+  };
 };
 
 type Item = {
@@ -34,7 +40,15 @@ type Item = {
   expiration: number;
 };
 
-const ACCEPT = ["image/jpeg", "image/png", "image/gif", "image/webp", "image/avif", "image/bmp", "image/tiff"];
+const ACCEPT = [
+  "image/jpeg",
+  "image/png",
+  "image/gif",
+  "image/webp",
+  "image/avif",
+  "image/bmp",
+  "image/tiff",
+];
 const PARALLEL = 3;
 
 function formatBytes(n: number) {
@@ -59,18 +73,29 @@ function toCodes(d: UploadData): Codes {
 async function readJson(res: Response) {
   const body = await res.json().catch(() => null);
   if (!res.ok && res.status !== 202) {
-    throw new Error(body?.error?.message || `Upload failed (HTTP ${res.status})`);
+    throw new Error(
+      body?.error?.message || `Upload failed (HTTP ${res.status})`,
+    );
   }
   return body as { data: UploadData; status: number };
 }
 
-function putWithProgress(url: string, file: File, contentType: string, onProgress: (p: number) => void) {
+function putWithProgress(
+  url: string,
+  file: File,
+  contentType: string,
+  onProgress: (p: number) => void,
+) {
   return new Promise<void>((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open("PUT", url);
     xhr.setRequestHeader("Content-Type", contentType);
-    xhr.upload.onprogress = (e) => e.lengthComputable && onProgress(e.loaded / e.total);
-    xhr.onload = () => (xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error(`Storage rejected the upload (HTTP ${xhr.status})`)));
+    xhr.upload.onprogress = (e) =>
+      e.lengthComputable && onProgress(e.loaded / e.total);
+    xhr.onload = () =>
+      xhr.status >= 200 && xhr.status < 300
+        ? resolve()
+        : reject(new Error(`Storage rejected the upload (HTTP ${xhr.status})`));
     // Status 0 with no response: blocked by the browser (usually a missing CORS rule on the
     // bucket) or the connection dropped. The caller falls back to uploading through the site.
     xhr.onerror = () => reject(new DirectUploadBlocked());
@@ -88,37 +113,71 @@ class DirectUploadBlocked extends Error {
 let directBlocked = false;
 
 /** UPLOAD_MODE=server: send the file to the app, reporting progress; resolves with the JSON body. */
-function postWithProgress(file: File, expiration: number, onProgress: (p: number) => void) {
-  return new Promise<{ data: UploadData; status: number }>((resolve, reject) => {
-    const form = new FormData();
-    form.append("image", file, file.name || "image");
-    form.append("expiration", String(expiration));
-    const xhr = new XMLHttpRequest();
-    xhr.open("POST", "/api/internal/uploads/file");
-    xhr.responseType = "json";
-    xhr.upload.onprogress = (e) => e.lengthComputable && onProgress(e.loaded / e.total);
-    xhr.onload = () => {
-      const body = xhr.response;
-      if (xhr.status === 200 || xhr.status === 202) resolve(body);
-      else reject(new Error(body?.error?.message || `Upload failed (HTTP ${xhr.status})`));
-    };
-    xhr.onerror = () =>
-      reject(new Error("Couldn't reach the server. Check your connection and try again."));
-    xhr.ontimeout = xhr.onerror;
-    xhr.send(form);
-  });
+function postWithProgress(
+  file: File,
+  expiration: number,
+  onProgress: (p: number) => void,
+  replaces?: { id: string; token: string },
+) {
+  return new Promise<{ data: UploadData; status: number }>(
+    (resolve, reject) => {
+      const form = new FormData();
+      form.append("expiration", String(expiration));
+      if (replaces) {
+        // The presigned upload this replaces, so it isn't counted twice against the hourly limit.
+        form.append("replaces_id", replaces.id);
+        form.append("replaces_token", replaces.token);
+      }
+      form.append("image", file, file.name || "image");
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", "/api/internal/uploads/file");
+      xhr.responseType = "json";
+      xhr.upload.onprogress = (e) =>
+        e.lengthComputable && onProgress(e.loaded / e.total);
+      xhr.onload = () => {
+        const body = xhr.response;
+        if (xhr.status === 200 || xhr.status === 202) resolve(body);
+        else
+          reject(
+            new Error(
+              body?.error?.message || `Upload failed (HTTP ${xhr.status})`,
+            ),
+          );
+      };
+      xhr.onerror = () =>
+        reject(
+          new Error(
+            "Couldn't reach the server. Check your connection and try again.",
+          ),
+        );
+      xhr.ontimeout = xhr.onerror;
+      xhr.send(form);
+    },
+  );
 }
 
 async function pollUntilDone(id: string, token: string): Promise<UploadData> {
   for (let i = 0; i < 60; i++) {
     await new Promise((r) => setTimeout(r, 2000));
-    const body = await readJson(await fetch(`/api/internal/uploads/${id}?token=${encodeURIComponent(token)}`));
+    const body = await readJson(
+      await fetch(
+        `/api/internal/uploads/${id}?token=${encodeURIComponent(token)}`,
+      ),
+    );
     if (body.status === 200) return body.data;
   }
-  throw new Error("Processing is taking too long. Try again; if it keeps happening, the site's image worker may be down.");
+  throw new Error(
+    "Processing is taking too long. Try again; if it keeps happening, the site's image worker may be down.",
+  );
 }
 
-export function Uploader({ maxBytes, mode }: { maxBytes: number; mode: "direct" | "server" }) {
+export function Uploader({
+  maxBytes,
+  mode,
+}: {
+  maxBytes: number;
+  mode: "direct" | "server";
+}) {
   const [items, setItems] = useState<Item[]>([]);
   const [dragging, setDragging] = useState(false);
   const [expiration, setExpiration] = useState(0);
@@ -132,7 +191,9 @@ export function Uploader({ maxBytes, mode }: { maxBytes: number; mode: "direct" 
   const [batchFormat, setBatchFormat] = useState<keyof Codes>("direct");
 
   const patch = useCallback((key: string, p: Partial<Item>) => {
-    setItems((list) => list.map((it) => (it.key === key ? { ...it, ...p } : it)));
+    setItems((list) =>
+      list.map((it) => (it.key === key ? { ...it, ...p } : it)),
+    );
   }, []);
 
   const runOne = useCallback(
@@ -146,16 +207,26 @@ export function Uploader({ maxBytes, mode }: { maxBytes: number; mode: "direct" 
             await fetch("/api/internal/uploads/url", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ url: item.url, expiration: item.expiration }),
+              body: JSON.stringify({
+                url: item.url,
+                expiration: item.expiration,
+              }),
             }),
           );
           data = body.data;
         } else {
           const file = item.file!;
-          const viaSite = async () => {
+          const viaSite = async (replaces?: { id: string; token: string }) => {
             patch(item.key, { state: "uploading", progress: 0 });
-            const done = await postWithProgress(file, item.expiration, (progress) =>
-              patch(item.key, { progress, ...(progress >= 1 ? { state: "processing" } : {}) }),
+            const done = await postWithProgress(
+              file,
+              item.expiration,
+              (progress) =>
+                patch(item.key, {
+                  progress,
+                  ...(progress >= 1 ? { state: "processing" } : {}),
+                }),
+              replaces,
             );
             if (done.status === 202) {
               const token = done.data.delete_url?.split("/").pop() ?? "";
@@ -171,12 +242,23 @@ export function Uploader({ maxBytes, mode }: { maxBytes: number; mode: "direct" 
               await fetch("/api/internal/uploads/presign", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ name: file.name, size: file.size, type: file.type, expiration: item.expiration }),
+                body: JSON.stringify({
+                  name: file.name,
+                  size: file.size,
+                  type: file.type,
+                  expiration: item.expiration,
+                }),
               }),
             );
-            const p = presign.data as unknown as { id: string; token: string; upload_url: string };
+            const p = presign.data as unknown as {
+              id: string;
+              token: string;
+              upload_url: string;
+            };
             try {
-              await putWithProgress(p.upload_url, file, file.type, (progress) => patch(item.key, { progress }));
+              await putWithProgress(p.upload_url, file, file.type, (progress) =>
+                patch(item.key, { progress }),
+              );
             } catch (err) {
               if (!(err instanceof DirectUploadBlocked)) throw err;
               directBlocked = true;
@@ -195,15 +277,21 @@ export function Uploader({ maxBytes, mode }: { maxBytes: number; mode: "direct" 
                   body: JSON.stringify({ token: p.token }),
                 }),
               );
-              data = done.status === 202 ? await pollUntilDone(p.id, p.token) : done.data;
+              data =
+                done.status === 202
+                  ? await pollUntilDone(p.id, p.token)
+                  : done.data;
             } else {
-              data = await viaSite();
+              data = await viaSite({ id: p.id, token: p.token });
             }
           }
         }
         patch(item.key, { state: "done", data, file: undefined });
       } catch (err) {
-        patch(item.key, { state: "error", error: err instanceof Error ? err.message : "Upload failed" });
+        patch(item.key, {
+          state: "error",
+          error: err instanceof Error ? err.message : "Upload failed",
+        });
       }
     },
     [patch, mode],
@@ -237,9 +325,18 @@ export function Uploader({ maxBytes, mode }: { maxBytes: number; mode: "direct" 
           expiration: expirationRef.current,
         };
         if (!ACCEPT.includes(file.type)) {
-          next.push({ ...base, state: "error", error: "Not a supported image (JPG, PNG, GIF, WebP, AVIF, BMP, TIFF)." });
+          next.push({
+            ...base,
+            state: "error",
+            error:
+              "Not a supported image (JPG, PNG, GIF, WebP, AVIF, BMP, TIFF).",
+          });
         } else if (file.size > maxBytes) {
-          next.push({ ...base, state: "error", error: `Over the ${formatBytes(maxBytes)} limit.` });
+          next.push({
+            ...base,
+            state: "error",
+            error: `Over the ${formatBytes(maxBytes)} limit.`,
+          });
         } else {
           next.push({ ...base, file, preview: URL.createObjectURL(file) });
         }
@@ -251,7 +348,8 @@ export function Uploader({ maxBytes, mode }: { maxBytes: number; mode: "direct" 
 
   // Drag and drop anywhere on the page, and paste from the clipboard.
   useEffect(() => {
-    const hasFiles = (e: DragEvent) => Array.from(e.dataTransfer?.types ?? []).includes("Files");
+    const hasFiles = (e: DragEvent) =>
+      Array.from(e.dataTransfer?.types ?? []).includes("Files");
     const onEnter = (e: DragEvent) => {
       if (!hasFiles(e)) return;
       e.preventDefault();
@@ -274,7 +372,11 @@ export function Uploader({ maxBytes, mode }: { maxBytes: number; mode: "direct" 
     };
     const onPaste = (e: ClipboardEvent) => {
       const target = e.target as HTMLElement | null;
-      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA")) return;
+      if (
+        target &&
+        (target.tagName === "INPUT" || target.tagName === "TEXTAREA")
+      )
+        return;
       const files = Array.from(e.clipboardData?.files ?? []);
       if (files.length) {
         e.preventDefault();
@@ -316,11 +418,19 @@ export function Uploader({ maxBytes, mode }: { maxBytes: number; mode: "direct" 
   }
 
   const done = items.filter((i) => i.state === "done" && i.data);
-  const busy = items.some((i) => i.state === "queued" || i.state === "uploading" || i.state === "processing");
+  const busy = items.some(
+    (i) =>
+      i.state === "queued" ||
+      i.state === "uploading" ||
+      i.state === "processing",
+  );
 
   function copyAll() {
     const f = FORMATS.find((x) => x.key === batchFormat)!;
-    copy(done.map((i) => toCodes(i.data!)[batchFormat]).join("\n"), `${done.length} × ${f.what}`);
+    copy(
+      done.map((i) => toCodes(i.data!)[batchFormat]).join("\n"),
+      `${done.length} × ${f.what}`,
+    );
   }
 
   function retry(it: Item) {
@@ -341,15 +451,23 @@ export function Uploader({ maxBytes, mode }: { maxBytes: number; mode: "direct" 
         </span>
         <p className="hint">Drop images anywhere on this page</p>
         <p className="sub">
-          Or paste with <kbd>Ctrl</kbd> <kbd>V</kbd>. JPG, PNG, GIF, WebP, AVIF up to {formatBytes(maxBytes)} each.
+          Or paste with <kbd>Ctrl</kbd> <kbd>V</kbd>. JPG, PNG, GIF, WebP, AVIF
+          up to {formatBytes(maxBytes)} each.
         </p>
         <div className="controls">
-          <button type="button" className="btn primary" onClick={() => fileInput.current?.click()}>
+          <button
+            type="button"
+            className="btn primary"
+            onClick={() => fileInput.current?.click()}
+          >
             Choose images
           </button>
           <label className="inline">
             Delete after
-            <select value={expiration} onChange={(e) => setExpiration(Number(e.target.value))}>
+            <select
+              value={expiration}
+              onChange={(e) => setExpiration(Number(e.target.value))}
+            >
               {EXPIRY_OPTIONS.map((o) => (
                 <option key={o.seconds} value={o.seconds}>
                   {o.label}
@@ -370,7 +488,11 @@ export function Uploader({ maxBytes, mode }: { maxBytes: number; mode: "direct" 
             value={url}
             onChange={(e) => setUrl(e.target.value)}
           />
-          <button type="submit" className="btn secondary" disabled={!/^https?:\/\/./i.test(url.trim())}>
+          <button
+            type="submit"
+            className="btn secondary"
+            disabled={!/^https?:\/\/./i.test(url.trim())}
+          >
             Import
           </button>
         </form>
@@ -391,7 +513,9 @@ export function Uploader({ maxBytes, mode }: { maxBytes: number; mode: "direct" 
         <section className="sheet" aria-label="Your uploads">
           <div className="sheet-head">
             <h2>
-              {busy ? "Uploading…" : `${done.length} image${done.length === 1 ? "" : "s"} ready`}
+              {busy
+                ? "Uploading…"
+                : `${done.length} image${done.length === 1 ? "" : "s"} ready`}
             </h2>
             <div className="sheet-tools">
               {done.length > 1 && (
@@ -399,14 +523,24 @@ export function Uploader({ maxBytes, mode }: { maxBytes: number; mode: "direct" 
                   <label className="sr-only" htmlFor="batch-format">
                     Format for copying all
                   </label>
-                  <select id="batch-format" value={batchFormat} onChange={(e) => setBatchFormat(e.target.value as keyof Codes)}>
+                  <select
+                    id="batch-format"
+                    value={batchFormat}
+                    onChange={(e) =>
+                      setBatchFormat(e.target.value as keyof Codes)
+                    }
+                  >
                     {FORMATS.map((f) => (
                       <option key={f.key} value={f.key}>
                         {f.label}
                       </option>
                     ))}
                   </select>
-                  <button type="button" className="btn secondary small" onClick={copyAll}>
+                  <button
+                    type="button"
+                    className="btn secondary small"
+                    onClick={copyAll}
+                  >
                     <IconCopy size={15} /> Copy all {done.length}
                   </button>
                 </>
@@ -415,7 +549,13 @@ export function Uploader({ maxBytes, mode }: { maxBytes: number; mode: "direct" 
                 <button
                   type="button"
                   className="btn ghost small"
-                  onClick={() => setItems((l) => l.filter((i) => i.state !== "done" && i.state !== "error"))}
+                  onClick={() =>
+                    setItems((l) =>
+                      l.filter(
+                        (i) => i.state !== "done" && i.state !== "error",
+                      ),
+                    )
+                  }
                 >
                   Clear list
                 </button>
@@ -433,7 +573,9 @@ export function Uploader({ maxBytes, mode }: { maxBytes: number; mode: "direct" 
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={it.preview} alt="" />
                 ) : null}
-                <span className="frame-no">{String(items.length - idx).padStart(2, "0")}</span>
+                <span className="frame-no">
+                  {String(items.length - idx).padStart(2, "0")}
+                </span>
               </div>
               <div className="meta">
                 <div className="shot-top">
@@ -444,21 +586,42 @@ export function Uploader({ maxBytes, mode }: { maxBytes: number; mode: "direct" 
                   <div className="shot-actions">
                     {it.data && (
                       <>
-                        <button type="button" className="btn primary small" onClick={() => copy(it.data!.url, "Direct link")}>
+                        <button
+                          type="button"
+                          className="btn primary small"
+                          onClick={() => copy(it.data!.url, "Direct link")}
+                        >
                           <IconCopy size={15} /> Copy link
                         </button>
-                        <a className="btn secondary small icon" href={it.data.url_viewer} target="_blank" rel="noreferrer" aria-label="Open viewer page" title="Open viewer page">
+                        <a
+                          className="btn secondary small icon"
+                          href={it.data.url_viewer}
+                          target="_blank"
+                          rel="noreferrer"
+                          aria-label="Open viewer page"
+                          title="Open viewer page"
+                        >
                           <IconOpen size={16} />
                         </a>
                       </>
                     )}
                     {it.state === "error" && (it.file || it.url) && (
-                      <button type="button" className="btn secondary small" onClick={() => retry(it)}>
+                      <button
+                        type="button"
+                        className="btn secondary small"
+                        onClick={() => retry(it)}
+                      >
                         Try again
                       </button>
                     )}
                     {(it.state === "error" || it.state === "done") && (
-                      <button type="button" className="btn ghost small icon" onClick={() => remove(it.key)} aria-label="Remove from list" title="Remove from list">
+                      <button
+                        type="button"
+                        className="btn ghost small icon"
+                        onClick={() => remove(it.key)}
+                        aria-label="Remove from list"
+                        title="Remove from list"
+                      >
                         <IconX size={16} />
                       </button>
                     )}
@@ -466,7 +629,9 @@ export function Uploader({ maxBytes, mode }: { maxBytes: number; mode: "direct" 
                 </div>
                 {(it.state === "queued" || it.state === "uploading") && (
                   <div className="progress" aria-label="Upload progress">
-                    <span style={{ width: `${Math.round(it.progress * 100)}%` }} />
+                    <span
+                      style={{ width: `${Math.round(it.progress * 100)}%` }}
+                    />
                   </div>
                 )}
                 {it.data && (
@@ -476,7 +641,13 @@ export function Uploader({ maxBytes, mode }: { maxBytes: number; mode: "direct" 
                       <div className="delete-note">
                         <span>Delete link:</span>
                         <code>{it.data.delete_url}</code>
-                        <button type="button" className="btn ghost small" onClick={() => copy(it.data!.delete_url!, "Delete link")}>
+                        <button
+                          type="button"
+                          className="btn ghost small"
+                          onClick={() =>
+                            copy(it.data!.delete_url!, "Delete link")
+                          }
+                        >
                           Copy
                         </button>
                       </div>
@@ -502,14 +673,19 @@ export function Uploader({ maxBytes, mode }: { maxBytes: number; mode: "direct" 
 }
 
 function Status({ it }: { it: Item }) {
-  const size = it.data ? `${it.data.width} × ${it.data.height} · ${formatBytes(it.data.size)}` : it.size ? formatBytes(it.size) : "From a link";
+  const size = it.data
+    ? `${it.data.width} × ${it.data.height} · ${formatBytes(it.data.size)}`
+    : it.size
+      ? formatBytes(it.size)
+      : "From a link";
   switch (it.state) {
     case "queued":
       return <span className="status">Waiting · {size}</span>;
     case "uploading":
       return (
         <span className="status">
-          <span className="spinner" aria-hidden="true" /> Uploading {Math.round(it.progress * 100)}% · {size}
+          <span className="spinner" aria-hidden="true" /> Uploading{" "}
+          {Math.round(it.progress * 100)}% · {size}
         </span>
       );
     case "processing":
@@ -522,7 +698,9 @@ function Status({ it }: { it: Item }) {
       return <span className="status err">{it.error}</span>;
     case "done":
       return it.data?.status === "flagged" ? (
-        <span className="status warn">Flagged as sensitive: blurred on its page · {size}</span>
+        <span className="status warn">
+          Flagged as sensitive: blurred on its page · {size}
+        </span>
       ) : (
         <span className="status ok">
           <IconCheck size={15} /> Ready · {size}

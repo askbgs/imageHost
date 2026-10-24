@@ -101,7 +101,6 @@ export const config = {
 
   limits: {
     guestUploadsPerHour: int("GUEST_UPLOADS_PER_HOUR", 30),
-    userUploadsPerHour: int("USER_UPLOADS_PER_HOUR", 200),
     reportsPerHour: int("REPORTS_PER_HOUR", 10),
   },
 

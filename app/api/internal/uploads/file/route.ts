@@ -16,19 +16,32 @@ export async function POST(req: Request) {
   try {
     const declared = Number(req.headers.get("content-length") || 0);
     if (declared > config.maxUploadBytes + 64 * 1024) {
-      throw new ApiError("file_too_large", `Images must be ${config.maxUploadBytes / 1024 / 1024} MB or smaller`);
+      throw new ApiError(
+        "file_too_large",
+        `Images must be ${config.maxUploadBytes / 1024 / 1024} MB or smaller`,
+      );
     }
-
-    const { user, ip } = await webUploadGate(req);
 
     let form: FormData;
     try {
       form = await req.formData();
     } catch {
-      throw new ApiError("invalid_request", "Send the image as multipart/form-data");
+      throw new ApiError(
+        "invalid_request",
+        "Send the image as multipart/form-data",
+      );
     }
+    const replacesId = form.get("replaces_id");
+    const replacesToken = form.get("replaces_token");
+    const { user, ip } = await webUploadGate(req, {
+      replaces:
+        typeof replacesId === "string" && typeof replacesToken === "string"
+          ? { id: replacesId, token: replacesToken }
+          : undefined,
+    });
     const file = form.get("image");
-    if (!file || typeof file === "string") throw new ApiError("invalid_request", "The image field is required");
+    if (!file || typeof file === "string")
+      throw new ApiError("invalid_request", "The image field is required");
 
     const result = await ingestBytes({
       bytes: Buffer.from(await file.arrayBuffer()),

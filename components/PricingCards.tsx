@@ -2,70 +2,104 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { CurrencySelect, useCurrency } from "./Currency";
 import { IconCheck } from "./Icons";
 
 export type PriceCard = {
   id: string;
   label: string;
   tagline: string;
-  priceLkr: number | null; // null = custom
+  /** Monthly price in the base price currency; null = custom. */
+  price: number | null;
   features: string[];
   recommended?: boolean;
-  cta: { label: string; href?: string; disabled?: boolean; tone: "primary" | "secondary" };
+  cta: {
+    label: string;
+    href?: string;
+    disabled?: boolean;
+    tone: "primary" | "secondary";
+  };
   current?: boolean;
 };
 
-const lkr = (n: number) => n.toLocaleString("en");
-
 export function PricingCards({ cards }: { cards: PriceCard[] }) {
   const [yearly, setYearly] = useState(false);
+  const { currency, convert, number } = useCurrency();
 
   return (
     <>
-      <div className="billing-toggle segmented" role="group" aria-label="Billing period">
-        <button type="button" aria-pressed={!yearly} onClick={() => setYearly(false)}>
-          Monthly
-        </button>
-        <button type="button" aria-pressed={yearly} onClick={() => setYearly(true)}>
-          Yearly <span className="save-pill">2 months free</span>
-        </button>
+      <div className="pricing-controls">
+        <div
+          className="billing-toggle segmented"
+          role="group"
+          aria-label="Billing period"
+        >
+          <button
+            type="button"
+            aria-pressed={!yearly}
+            onClick={() => setYearly(false)}
+          >
+            Monthly
+          </button>
+          <button
+            type="button"
+            aria-pressed={yearly}
+            onClick={() => setYearly(true)}
+          >
+            Yearly <span className="save-pill">2 months free</span>
+          </button>
+        </div>
+        <CurrencySelect />
       </div>
 
       <div className="price-grid">
         {cards.map((c) => (
-          <section key={c.id} className={`price-card${c.recommended ? " recommended" : ""}${c.current ? " current" : ""}`} aria-labelledby={`plan-${c.id}`}>
+          <section
+            key={c.id}
+            className={`price-card${c.recommended ? " recommended" : ""}${c.current ? " current" : ""}`}
+            aria-labelledby={`plan-${c.id}`}
+          >
             {c.recommended && <span className="price-flag">Recommended</span>}
-            {c.current && <span className="price-flag current-flag">Your plan</span>}
+            {c.current && (
+              <span className="price-flag current-flag">Your plan</span>
+            )}
             <h2 id={`plan-${c.id}`}>{c.label}</h2>
             <p className="price-tagline">{c.tagline}</p>
             <div className="price-amount">
-              {c.priceLkr === null ? (
+              {c.price === null ? (
                 <span className="price-num">Custom</span>
-              ) : c.priceLkr === 0 ? (
+              ) : c.price === 0 ? (
                 <>
-                  <span className="price-cur">LKR</span>
+                  <span className="price-cur">{currency}</span>
                   <span className="price-num">0</span>
                   <span className="price-per">forever</span>
                 </>
               ) : (
                 <>
-                  <span className="price-cur">LKR</span>
-                  <span className="price-num">{lkr(yearly ? c.priceLkr * 10 : c.priceLkr)}</span>
-                  <span className="price-per">/ {yearly ? "year" : "month"}</span>
+                  <span className="price-cur">{currency}</span>
+                  <span className="price-num">
+                    {number(convert(yearly ? c.price * 10 : c.price))}
+                  </span>
+                  <span className="price-per">
+                    / {yearly ? "year" : "month"}
+                  </span>
                 </>
               )}
             </div>
             <p className="price-note">
-              {c.priceLkr === null
+              {c.price === null
                 ? "Volume limits, invoicing and support to fit your team."
-                : c.priceLkr === 0
+                : c.price === 0
                   ? "No card needed."
                   : yearly
-                    ? `LKR ${lkr(Math.round((c.priceLkr * 10) / 12))} a month, billed yearly`
-                    : `or LKR ${lkr(c.priceLkr * 10)} a year`}
+                    ? `${currency} ${number(convert((c.price * 10) / 12))} a month, billed yearly`
+                    : `or ${currency} ${number(convert(c.price * 10))} a year`}
             </p>
             {c.cta.disabled || !c.cta.href ? (
-              <span className={`btn block ${c.cta.tone} is-disabled`} aria-disabled="true">
+              <span
+                className={`btn block ${c.cta.tone} is-disabled`}
+                aria-disabled="true"
+              >
                 {c.cta.label}
               </span>
             ) : c.cta.href.startsWith("/") ? (
