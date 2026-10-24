@@ -5,13 +5,22 @@ import { useEffect, useRef, useState } from "react";
 import { signOut } from "@/app/actions/auth";
 import { IconChevron } from "./Icons";
 
-export function AccountMenu({ name, email, isAdmin }: { name: string; email: string; isAdmin: boolean }) {
+export function AccountMenu({
+  name,
+  email,
+  isAdmin,
+}: {
+  name: string;
+  email: string;
+  isAdmin: boolean;
+}) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!open) return;
-    const onDown = (e: MouseEvent) => !ref.current?.contains(e.target as Node) && setOpen(false);
+    const onDown = (e: MouseEvent) =>
+      !ref.current?.contains(e.target as Node) && setOpen(false);
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
     document.addEventListener("mousedown", onDown);
     document.addEventListener("keydown", onKey);
@@ -48,11 +57,26 @@ export function AccountMenu({ name, email, isAdmin }: { name: string; email: str
           <Link role="menuitem" href="/account" onClick={() => setOpen(false)}>
             My images
           </Link>
-          <Link role="menuitem" href="/account/keys" onClick={() => setOpen(false)}>
+          <Link
+            role="menuitem"
+            href="/account/keys"
+            onClick={() => setOpen(false)}
+          >
             API keys
           </Link>
-          <Link role="menuitem" href="/account/settings" onClick={() => setOpen(false)}>
+          <Link
+            role="menuitem"
+            href="/account/settings"
+            onClick={() => setOpen(false)}
+          >
             Settings
+          </Link>
+          <Link
+            role="menuitem"
+            href="/account/billing"
+            onClick={() => setOpen(false)}
+          >
+            Billing
           </Link>
           <Link role="menuitem" href="/pricing" onClick={() => setOpen(false)}>
             Plans and pricing

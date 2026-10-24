@@ -161,4 +161,40 @@ ALTER TABLE users ALTER COLUMN plan SET DEFAULT 'free';
 UPDATE users SET plan = 'free' WHERE plan IS NULL OR plan NOT IN ('free', 'pro', 'business');
 `,
   },
+  {
+    id: 5,
+    name: "paddle billing",
+    sql: `
+ALTER TABLE users ADD COLUMN IF NOT EXISTS paddle_customer_id TEXT UNIQUE;
+
+-- One row per Paddle subscription, kept in sync by the webhook.
+CREATE TABLE IF NOT EXISTS subscriptions (
+  id                  TEXT PRIMARY KEY,               -- Paddle sub_...
+  user_id             UUID REFERENCES users(id) ON DELETE SET NULL,
+  customer_id         TEXT NOT NULL,                  -- Paddle ctm_...
+  status              TEXT NOT NULL,                  -- active | trialing | past_due | paused | canceled
+  plan                TEXT NOT NULL,                  -- pro | business
+  price_id            TEXT,
+  billing_interval    TEXT,                           -- month | year
+  currency            TEXT,
+  current_period_end  TIMESTAMPTZ,
+  next_billed_at      TIMESTAMPTZ,
+  scheduled_change    TEXT,                           -- cancel | pause | resume
+  scheduled_change_at TIMESTAMPTZ,
+  canceled_at         TIMESTAMPTZ,
+  paddle_updated_at   TIMESTAMPTZ NOT NULL,           -- ignore events older than this
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_subscriptions_user ON subscriptions (user_id);
+CREATE INDEX IF NOT EXISTS idx_subscriptions_customer ON subscriptions (customer_id);
+
+-- Webhook events already handled, so retries are processed once.
+CREATE TABLE IF NOT EXISTS paddle_events (
+  id          TEXT PRIMARY KEY,                       -- evt_...
+  type        TEXT NOT NULL,
+  received_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+`,
+  },
 ];

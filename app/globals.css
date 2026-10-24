@@ -853,3 +853,14 @@ body:has(.bulk-bar) .toasts { bottom: 84px; }
 .currency-select { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; color: var(--muted); }
 .currency-select select { padding: 6px 28px 6px 10px; font-size: 14px; min-width: 0; max-width: 220px; }
 .pricing-foot a[href*="exchangerate-api"] { color: inherit; }
+
+/* ---------- Billing ---------- */
+.status-chip { display: inline-block; margin-left: 8px; font-size: 12px; font-weight: 600; padding: 3px 9px; border-radius: 999px; vertical-align: 1px; }
+.status-chip.ok { background: var(--ok-soft); color: var(--ok); }
+.status-chip.warn { background: var(--warn-soft); color: var(--warn); }
+.status-chip.muted { background: var(--table); color: var(--muted); }
+.billing-price { margin: 12px 0 0; font-family: var(--display); font-size: 28px; font-weight: 700; letter-spacing: -0.02em; }
+.billing-limits { list-style: none; padding: 0; margin: 20px 0; display: flex; flex-wrap: wrap; gap: 8px 24px; color: var(--muted); font-size: 14px; }
+.billing-limits strong { color: var(--ink); }
+.billing-actions { display: flex; flex-wrap: wrap; gap: 10px; padding-top: 20px; border-top: 1px solid var(--line); }
+.plan-links { display: flex; gap: 8px; flex-wrap: wrap; }

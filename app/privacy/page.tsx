@@ -27,6 +27,14 @@ export default function Privacy() {
         We don&apos;t sell your data or use it for advertising.
       </p>
 
+      <h2>Payments</h2>
+      <p>
+        If you buy a paid plan, the payment is handled by Paddle.com, our reseller and Merchant of Record. Paddle
+        collects your payment details, billing address and tax information under its own privacy policy, and we never
+        see your card details. We keep the subscription details Paddle sends us: your plan, its status and renewal
+        date, and your Paddle customer ID.
+      </p>
+
       <h2>Deleting your data</h2>
       <p>
         Delete single images from My images. To delete everything, open{" "}

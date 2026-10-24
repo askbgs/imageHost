@@ -4,13 +4,16 @@ import { PricingCards, type PriceCard } from "@/components/PricingCards";
 import { currentUser } from "@/lib/auth";
 import { config } from "@/lib/config";
 import { queryOne } from "@/lib/db";
+import { CURRENCIES, DEFAULT_CURRENCY, getRates, isCurrency } from "@/lib/fx";
 import {
-  CURRENCIES,
-  DEFAULT_CURRENCY,
-  getRates,
-  isCurrency,
-  priceCurrency,
-} from "@/lib/fx";
+  ACCESS_STATUSES,
+  billingEnabled,
+  checkoutSuccessUrl,
+  currentSubscription,
+  getPlanPricing,
+  paddleConfig,
+  type PaidPlanId,
+} from "@/lib/paddle";
 import { PLANS, PLAN_IDS, type PlanId } from "@/lib/plans";
 
 export const metadata = {
@@ -26,10 +29,11 @@ export default async function PricingPage({
 }: {
   searchParams: Promise<{ currency?: string }>;
 }) {
-  const [user, fx, params] = await Promise.all([
+  const [user, fx, params, pricing] = await Promise.all([
     currentUser(),
     getRates(),
     searchParams,
+    getPlanPricing(),
   ]);
   const asked = params.currency?.toUpperCase();
   const initialCurrency = isCurrency(asked) ? asked : DEFAULT_CURRENCY;
@@ -39,12 +43,16 @@ export default async function PricingPage({
     year: "numeric",
     timeZone: "UTC",
   });
+  const billing = billingEnabled();
   const account = user
-    ? await queryOne<{ plan: string }>(`SELECT plan FROM users WHERE id = $1`, [
-        user.id,
-      ])
+    ? await queryOne<{ plan: string; paddle_customer_id: string | null }>(
+        `SELECT plan, paddle_customer_id FROM users WHERE id = $1`,
+        [user.id],
+      )
     : null;
   const current = (account?.plan as PlanId | undefined) ?? null;
+  const sub = user && billing ? await currentSubscription(user.id) : null;
+  const liveSub = sub && ACCESS_STATUSES.includes(sub.status) ? sub : null;
   const mb = config.maxUploadBytes / 1024 / 1024;
   const contact = config.contactEmail;
 
@@ -54,6 +62,35 @@ export default async function PricingPage({
         ? `&body=${encodeURIComponent(`Hi,\n\nPlease switch my account (${user.email}) to the plan above.\n\nThanks`)}`
         : ""
     }`;
+
+  // Monthly and yearly prices, in pricing.currency.
+  const monthly = (id: PlanId) => {
+    if (id === "free") return 0;
+    const p = pricing.plans[id];
+    return p.month ?? (p.year !== null ? p.year / 12 : PLANS[id].price);
+  };
+  const yearPrice = (id: PlanId) =>
+    id === "free" ? 0 : pricing.plans[id].year;
+  const priceIds = (id: PaidPlanId) => ({
+    month: paddleConfig.prices[id].month || undefined,
+    year: paddleConfig.prices[id].year || undefined,
+  });
+
+  // "2 months free" when yearly is 10 × monthly; otherwise the actual saving. null hides the Yearly option.
+  const savings = (["pro", "business"] as PaidPlanId[])
+    .filter((id) => pricing.plans[id].month && pricing.plans[id].year)
+    .map((id) => 1 - pricing.plans[id].year! / (12 * pricing.plans[id].month!));
+  const yearlyOffered = (["pro", "business"] as PaidPlanId[]).some(
+    (id) => pricing.plans[id].year !== null,
+  );
+  const minSaving = savings.length ? Math.min(...savings) : 0;
+  const yearlyNote = !yearlyOffered
+    ? null
+    : Math.abs(minSaving - 1 / 6) < 0.01
+      ? "2 months free"
+      : minSaving >= 0.01
+        ? `Save ${Math.floor(minSaving * 100)}%`
+        : "";
 
   const base = [
     "No limit on how many images you keep",
@@ -67,39 +104,55 @@ export default async function PricingPage({
     const isCurrent = current === id;
     const rank = PLAN_IDS.indexOf(id);
     const currentRank = current ? PLAN_IDS.indexOf(current) : -1;
+    const tone = id === "pro" ? "primary" : "secondary";
+    const verb = rank < currentRank ? "Switch to" : "Upgrade to";
     let cta: PriceCard["cta"];
-    if (isCurrent)
-      cta = { label: "Your current plan", disabled: true, tone: "secondary" };
-    else if (id === "free") {
-      cta = user
-        ? {
-            label: "Included with every account",
-            disabled: true,
-            tone: "secondary",
-          }
-        : {
-            label: "Create a free account",
-            href: "/signup",
-            tone: "secondary",
-          };
-    } else if (!user)
+
+    if (id === "free") {
+      if (!user)
+        cta = {
+          label: "Create a free account",
+          href: "/signup",
+          tone: "secondary",
+        };
+      else if (liveSub)
+        cta = {
+          label: "Cancel your plan in Billing",
+          href: "/account/billing",
+          tone: "secondary",
+        };
+      else if (isCurrent)
+        cta = { label: "Your current plan", disabled: true, tone: "secondary" };
+      else
+        cta = {
+          label: "Included with every account",
+          disabled: true,
+          tone: "secondary",
+        };
+    } else if (!user) {
       cta = {
         label: `Start with ${p.label}`,
         href: `/signup?next=${encodeURIComponent("/pricing")}`,
-        tone: id === "pro" ? "primary" : "secondary",
+        tone,
       };
-    else if (rank < currentRank)
+    } else if (billing && liveSub) {
+      // Already paying: change the subscription in place.
       cta = {
-        label: `Switch to ${p.label}`,
-        href: mail(`Switch to ${p.label}`),
-        tone: "secondary",
+        label: `${verb} ${p.label}`,
+        tone,
+        switchTo: { plan: id, prices: priceIds(id) },
       };
-    else
+    } else if (isCurrent) {
+      cta = { label: "Your current plan", disabled: true, tone: "secondary" };
+    } else if (billing) {
+      cta = { label: `${verb} ${p.label}`, tone, checkout: priceIds(id) };
+    } else {
       cta = {
-        label: `Upgrade to ${p.label}`,
-        href: mail(`Upgrade to ${p.label}`),
-        tone: id === "pro" ? "primary" : "secondary",
+        label: `${verb} ${p.label}`,
+        href: mail(`${verb} ${p.label}`),
+        tone,
       };
+    }
 
     const features = [
       `${p.maxApiKeys} API key${p.maxApiKeys === 1 ? "" : "s"}`,
@@ -114,9 +167,10 @@ export default async function PricingPage({
       id,
       label: p.label,
       tagline: p.tagline,
-      price: p.price,
+      price: monthly(id),
+      yearPrice: yearPrice(id),
       features,
-      recommended: id === "pro" && current !== "pro",
+      recommended: id === "pro" && current !== "pro" && current !== "business",
       current: isCurrent,
       cta,
     };
@@ -143,7 +197,7 @@ export default async function PricingPage({
   return (
     <CurrencyProvider
       initial={initialCurrency}
-      base={priceCurrency()}
+      base={pricing.currency}
       rates={fx.rates}
       currencies={CURRENCIES.map((c) => ({ code: c.code, name: c.name }))}
     >
@@ -156,7 +210,23 @@ export default async function PricingPage({
           </p>
         </section>
 
-        <PricingCards cards={cards} />
+        <PricingCards
+          cards={cards}
+          yearlyNote={yearlyNote}
+          currentPriceId={liveSub?.price_id ?? null}
+          paddle={
+            billing && user
+              ? {
+                  token: paddleConfig.clientToken,
+                  environment: paddleConfig.environment,
+                  email: user.email,
+                  customerId: account?.paddle_customer_id ?? null,
+                  userId: user.id,
+                  successUrl: checkoutSuccessUrl(),
+                }
+              : null
+          }
+        />
 
         <section className="compare" aria-labelledby="compare-title">
           <h2 id="compare-title">Compare plans</h2>
@@ -179,7 +249,7 @@ export default async function PricingPage({
                   <th scope="row">Price per month</th>
                   {PLAN_IDS.map((id) => (
                     <td key={id}>
-                      <Money amount={PLANS[id].price} />
+                      <Money amount={monthly(id)} />
                     </td>
                   ))}
                 </tr>
@@ -229,15 +299,50 @@ export default async function PricingPage({
 
         <section className="faq" aria-labelledby="faq-title">
           <h2 id="faq-title">Questions</h2>
-          <details>
-            <summary>How do I upgrade?</summary>
-            <p>
-              Choose Upgrade on a plan, or email{" "}
-              <a href={`mailto:${contact}`}>{contact}</a> from your
-              account&apos;s address. We switch your plan, usually within a day,
-              and the new limits apply to your existing keys straight away.
-            </p>
-          </details>
+          {billing ? (
+            <>
+              <details>
+                <summary>How do I upgrade?</summary>
+                <p>
+                  Choose Upgrade on a plan and pay with a card or another
+                  payment method offered in your country. Your new limits apply
+                  as soon as the payment goes through, and your existing keys
+                  get them straight away.
+                </p>
+              </details>
+              <details>
+                <summary>Can I change or cancel my plan?</summary>
+                <p>
+                  Yes, at any time. A plan change applies straight away: you pay
+                  the difference for the rest of the billing period, or
+                  it&apos;s credited if the new plan costs less. If you cancel,
+                  you keep your plan until the end of the period you&apos;ve
+                  paid for, then move to Free. Manage it all in{" "}
+                  <Link href="/account/billing">Billing</Link>.
+                </p>
+              </details>
+              <details>
+                <summary>Who handles the payment?</summary>
+                <p>
+                  Our orders are processed by Paddle.com, our online reseller
+                  and Merchant of Record. Paddle handles payment, sales tax and
+                  invoices, and your receipts come from Paddle. We never see
+                  your card details.
+                </p>
+              </details>
+            </>
+          ) : (
+            <details>
+              <summary>How do I upgrade?</summary>
+              <p>
+                Choose Upgrade on a plan, or email{" "}
+                <a href={`mailto:${contact}`}>{contact}</a> from your
+                account&apos;s address. We switch your plan, usually within a
+                day, and the new limits apply to your existing keys straight
+                away.
+              </p>
+            </details>
+          )}
           <details>
             <summary>What counts towards the API limit?</summary>
             <p>
@@ -266,6 +371,8 @@ export default async function PricingPage({
 
         <p className="pricing-foot">
           <FxNote updated={updated} fallback={fx.source === "fallback"} />{" "}
+          {billing &&
+            "Checkout shows the exact amount, including any tax, before you pay. "}
           {user ? (
             <Link href="/account/keys">See your usage</Link>
           ) : (

@@ -17,6 +17,7 @@ This covers Phases 1 to 2 of the spec and most of Phase 3: core upload, the publ
 | Expiry | 5 minutes to 6 months; a worker job removes expired and abandoned uploads every 10 minutes |
 | Safety | Magic-byte type checks (SVG and HEIC rejected), 32 MB and 100-megapixel caps, SSRF protection for URL uploads, per-IP and per-key rate limits, exact-hash block list, optional NSFW scoring hook |
 | Social sign-in | GitHub, Google and Facebook, each enabled by setting its client ID and secret. See [SOCIAL_LOGIN.md](SOCIAL_LOGIN.md) |
+| Plans and payments | Free, Pro and Business plans with their own API and upload limits. Monthly or yearly subscriptions through Paddle: checkout, upgrades, cancellation and invoices. See [PADDLE.md](PADDLE.md) |
 | Accounts | Sign up and sign in with email and password (scrypt hashes, server-side sessions in httpOnly cookies, lockout after repeated wrong passwords). Uploading from the website requires an account by default |
 | My images | Every upload is saved to the uploader's library: search, copy links, open, delete |
 | API keys | Users create and revoke their own keys (shown once, stored hashed). Images uploaded with a key land in the owner's library. Limits depend on the plan: Free has 1 key and 10 API uploads per hour, counted across the account; admins change plans under Moderation → Users |

@@ -133,5 +133,7 @@ export const config = {
 
   abuseEmail: env("ABUSE_EMAIL", "abuse@example.com"),
   // Where plan upgrades and sales questions go. Defaults to ABUSE_EMAIL.
+  /** Days after a payment in which a full refund can be asked for (shown on /refunds). */
+  refundDays: int("REFUND_DAYS", 14),
   contactEmail: process.env.CONTACT_EMAIL || env("ABUSE_EMAIL", "abuse@example.com"),
 };

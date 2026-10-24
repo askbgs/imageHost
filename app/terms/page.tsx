@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { config } from "@/lib/config";
 
 export const metadata = { title: "Terms of service" };
@@ -27,6 +28,18 @@ export default function Terms() {
       <p>
         You can delete your images at any time from My images. Each upload also comes with a delete link. Images
         with an expiry are deleted automatically when it passes.
+      </p>
+
+      <h2>Paid plans</h2>
+      <p>
+        Our order process is conducted by our online reseller Paddle.com. Paddle.com is the Merchant of Record for all
+        our orders. Paddle provides all customer service inquiries and handles returns.
+      </p>
+      <p>
+        Pro and Business are subscriptions that renew automatically each month or year until you cancel. You can
+        cancel at any time in Account → Billing; you keep your plan until the end of the period you&apos;ve paid for.
+        Plan changes take effect straight away, and the difference is charged or credited for the rest of the period.
+        See our <Link href="/refunds">refund policy</Link>.
       </p>
 
       <h2>No warranty</h2>

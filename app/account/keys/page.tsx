@@ -87,11 +87,16 @@ export default async function KeysPage() {
               hour
             </p>
           </div>
-          {plan.id !== "business" && (
-            <Link className="btn secondary small" href="/pricing">
-              {plan.id === "free" ? "Need more? See plans" : "Compare plans"}
+          <div className="plan-links">
+            <Link className="btn secondary small" href="/account/billing">
+              Billing
             </Link>
-          )}
+            {plan.id !== "business" && (
+              <Link className="btn secondary small" href="/pricing">
+                {plan.id === "free" ? "Need more? See plans" : "Compare plans"}
+              </Link>
+            )}
+          </div>
         </div>
         <div className="meters">
           <div className="meter">
