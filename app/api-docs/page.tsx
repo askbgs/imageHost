@@ -18,14 +18,16 @@ export default function ApiDocs() {
       </p>
 
       <h2>Upload an image</h2>
-      <pre>{`POST ${base}/1/upload
+      <pre>{`POST ${base}/v1/upload
 
 key         required  your API key (or ?key=, X-API-Key header, or Bearer token)
 image       required  a file, a base64 string, or an http(s) URL
 name        optional  file name
-expiration  optional  delete after N seconds (60 to 15552000)`}</pre>
+expiration  optional  delete after N seconds (60 to 15552000)
+album       optional  ID of one of your albums to put the image in
+                      (the last part of the album link, /a/AbC12345)`}</pre>
 
-      <pre>{`curl -X POST "${base}/1/upload?key=YOUR_KEY" \\
+      <pre>{`curl -X POST "${base}/v1/upload?key=YOUR_KEY" \\
   -F "image=@photo.jpg" \\
   -F "expiration=86400"`}</pre>
 
@@ -50,7 +52,7 @@ expiration  optional  delete after N seconds (60 to 15552000)`}</pre>
 }`}</pre>
       <p>
         If processing takes longer than a minute the response is HTTP 202 with the image&apos;s id; poll{" "}
-        <code>GET /1/images/&#123;id&#125;</code> until it returns 200.
+        <code>GET /v1/images/&#123;id&#125;</code> until it returns 200.
       </p>
 
       <h2>Other endpoints</h2>
@@ -63,19 +65,19 @@ expiration  optional  delete after N seconds (60 to 15552000)`}</pre>
         </thead>
         <tbody>
           <tr>
-            <td><code>GET /1/images</code></td>
+            <td><code>GET /v1/images</code></td>
             <td>Your uploads, newest first. Query: <code>page</code>, <code>per_page</code> (max 100).</td>
           </tr>
           <tr>
-            <td><code>GET /1/images/&#123;id&#125;</code></td>
+            <td><code>GET /v1/images/&#123;id&#125;</code></td>
             <td>One image&apos;s links and details.</td>
           </tr>
           <tr>
-            <td><code>DELETE /1/images/&#123;id&#125;</code></td>
+            <td><code>DELETE /v1/images/&#123;id&#125;</code></td>
             <td>Delete with your key, or with <code>?delete_token=…</code> for a guest upload.</td>
           </tr>
           <tr>
-            <td><code>POST /1/reports</code></td>
+            <td><code>POST /v1/reports</code></td>
             <td>Report an image. Body: <code>image_id</code>, <code>reason</code> (illegal, nsfw, copyright, spam, other), <code>details</code>.</td>
           </tr>
         </tbody>
@@ -100,6 +102,7 @@ expiration  optional  delete after N seconds (60 to 15552000)`}</pre>
           <tr><td>413</td><td><code>file_too_large</code></td><td>The image is over {config.maxUploadBytes / 1024 / 1024} MB.</td></tr>
           <tr><td>415</td><td><code>unsupported_type</code></td><td>Not JPG, PNG, GIF, WebP, AVIF, BMP or TIFF. SVG and HEIC are not accepted.</td></tr>
           <tr><td>422</td><td><code>blocked_content</code></td><td>This file was removed before and cannot be uploaded again.</td></tr>
+          <tr><td>404</td><td><code>not_found</code></td><td>The <code>album</code> doesn&apos;t exist or isn&apos;t yours.</td></tr>
           <tr><td>403</td><td><code>storage_full</code></td><td>Your account has used its plan&apos;s storage. Delete images or upgrade, then try again.</td></tr>
           <tr><td>429</td><td><code>rate_limited</code></td><td>Your account is over its plan&apos;s hourly upload limit; see the <code>Retry-After</code> header.</td></tr>
           <tr><td>502</td><td><code>url_fetch_failed</code></td><td>The image URL could not be downloaded.</td></tr>
@@ -126,6 +129,18 @@ expiration  optional  delete after N seconds (60 to 15552000)`}</pre>
           ))}
         </tbody>
       </table>
+
+      <h2>Versions</h2>
+      <p>
+        Every API path starts with its version: <code>/v1/</code> is the current one. Changes that could break your
+        code, such as renamed fields or a different response format, only ever come in a new version (<code>/v2/</code>),
+        and <code>/v1/</code> keeps working when it arrives. New optional fields may be added to <code>/v1/</code> at any
+        time, so ignore fields you don&apos;t use.
+      </p>
+      <p>
+        Integrations set up with the earlier <code>/1/</code> paths (for example <code>/1/upload</code>) still work: they
+        are the same as <code>/v1/</code>.
+      </p>
 
       <h2>Get a key</h2>
       <p>

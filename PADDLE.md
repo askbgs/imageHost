@@ -34,14 +34,14 @@ Go to **Paddle → Catalog → Products → New product**.
 | Product | Price | Billing period | Example |
 |---|---|---|---|
 | PinPicX Pro | Monthly | every 1 month | USD 2.99 |
-| PinPicX Pro | Yearly | every 1 year | USD 29.90 (10 × monthly = "2 months free") |
+| PinPicX Pro | Yearly | every 1 year | USD 32.89 (11 × monthly = "1 month free") |
 | PinPicX Business | Monthly | every 1 month | USD 14.99 |
-| PinPicX Business | Yearly | every 1 year | USD 149.90 |
+| PinPicX Business | Yearly | every 1 year | USD 164.89 |
 
 - Use **one currency for all four prices**. USD is the simplest choice.
 - **Sri Lankan rupees (LKR) can't be charged through Paddle.** Paddle charges customers in Sri Lanka in USD. Visitors can still *view* prices in LKR and other currencies with the currency selector on /pricing.
 - If you'd like customers in some countries to pay in their own currency (INR, EUR, GBP, …), add **country-specific prices** to each price in Paddle. Checkout then charges those amounts, and the pricing page notes that checkout shows the exact amount before payment.
-- The pricing page reads the amounts from Paddle, so you only set prices in one place. If you leave out the yearly prices, the Yearly option disappears. If yearly isn't exactly 10 × monthly, the label shows the real saving (for example "Save 20%").
+- The pricing page reads the amounts from Paddle, so you only set prices in one place. If you leave out the yearly prices, the Yearly option disappears. The Yearly label works out the saving from the prices: 11 × monthly shows "1 month free", 10 × monthly "2 months free", and anything else the percentage (for example "Save 20%").
 - Copy each price ID (`pri_…`).
 
 ## 3. Get the keys

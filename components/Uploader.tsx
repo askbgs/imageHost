@@ -38,6 +38,8 @@ type Item = {
   file?: File;
   url?: string;
   expiration: number;
+  /** Album to put the image in, chosen when it was added to the queue. */
+  album: string;
 };
 
 const ACCEPT = [
@@ -116,6 +118,7 @@ let directBlocked = false;
 function postWithProgress(
   file: File,
   expiration: number,
+  album: string,
   onProgress: (p: number) => void,
   replaces?: { id: string; token: string },
 ) {
@@ -123,6 +126,7 @@ function postWithProgress(
     (resolve, reject) => {
       const form = new FormData();
       form.append("expiration", String(expiration));
+      if (album) form.append("album", album);
       if (replaces) {
         // The presigned upload this replaces, so it isn't counted twice against the hourly limit.
         form.append("replaces_id", replaces.id);
@@ -174,13 +178,26 @@ async function pollUntilDone(id: string, token: string): Promise<UploadData> {
 export function Uploader({
   maxBytes,
   mode,
+  albums,
+  initialAlbum,
 }: {
   maxBytes: number;
   mode: "direct" | "server";
+  /** The account's albums; shows an "Add to album" picker. */
+  albums?: { id: string; title: string }[];
+  /** Album chosen up front, e.g. from an album's "Upload to this album". */
+  initialAlbum?: string;
 }) {
   const [items, setItems] = useState<Item[]>([]);
   const [dragging, setDragging] = useState(false);
   const [expiration, setExpiration] = useState(0);
+  const [album, setAlbum] = useState(
+    initialAlbum && albums?.some((a) => a.id === initialAlbum)
+      ? initialAlbum
+      : "",
+  );
+  const albumRef = useRef(album);
+  albumRef.current = album;
   const [url, setUrl] = useState("");
   const fileInput = useRef<HTMLInputElement>(null);
   const dragDepth = useRef(0);
@@ -210,6 +227,7 @@ export function Uploader({
               body: JSON.stringify({
                 url: item.url,
                 expiration: item.expiration,
+                album: item.album || undefined,
               }),
             }),
           );
@@ -221,6 +239,7 @@ export function Uploader({
             const done = await postWithProgress(
               file,
               item.expiration,
+              item.album,
               (progress) =>
                 patch(item.key, {
                   progress,
@@ -247,6 +266,7 @@ export function Uploader({
                   size: file.size,
                   type: file.type,
                   expiration: item.expiration,
+                  album: item.album || undefined,
                 }),
               }),
             );
@@ -323,6 +343,7 @@ export function Uploader({
           state: "queued",
           progress: 0,
           expiration: expirationRef.current,
+          album: albumRef.current,
         };
         if (!ACCEPT.includes(file.type)) {
           next.push({
@@ -411,6 +432,7 @@ export function Uploader({
         progress: 0,
         url: value,
         expiration,
+        album,
       },
       ...list,
     ]);
@@ -475,6 +497,19 @@ export function Uploader({
               ))}
             </select>
           </label>
+          {albums && albums.length > 0 && (
+            <label className="inline">
+              Album
+              <select value={album} onChange={(e) => setAlbum(e.target.value)}>
+                <option value="">No album</option>
+                {albums.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.title}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
         </div>
         <div className="divider-or">or import from a link</div>
         <form className="url-row" onSubmit={addUrl}>

@@ -77,7 +77,8 @@ export default async function PricingPage({
     year: paddleConfig.prices[id].year || undefined,
   });
 
-  // "2 months free" when yearly is 10 × monthly; otherwise the actual saving. null hides the Yearly option.
+  // "1 month free" when yearly is 11 × monthly (or "N months free" for another whole number of months);
+  // otherwise the actual saving. null hides the Yearly option.
   const savings = (["pro", "business"] as PaidPlanId[])
     .filter((id) => pricing.plans[id].month && pricing.plans[id].year)
     .map((id) => 1 - pricing.plans[id].year! / (12 * pricing.plans[id].month!));
@@ -85,15 +86,17 @@ export default async function PricingPage({
     (id) => pricing.plans[id].year !== null,
   );
   const minSaving = savings.length ? Math.min(...savings) : 0;
+  const freeMonths = Math.round(minSaving * 12);
   const yearlyNote = !yearlyOffered
     ? null
-    : Math.abs(minSaving - 1 / 6) < 0.01
-      ? "2 months free"
+    : freeMonths >= 1 && Math.abs(minSaving * 12 - freeMonths) < 0.06
+      ? `${freeMonths} month${freeMonths === 1 ? "" : "s"} free`
       : minSaving >= 0.01
         ? `Save ${Math.floor(minSaving * 100)}%`
         : "";
 
   const base = [
+    "Public and unlisted albums",
     `Files up to ${mb} MB`,
     "Direct links, HTML, BBCode and Markdown",
     "Location and camera data removed",
@@ -159,6 +162,7 @@ export default async function PricingPage({
       `${p.maxApiKeys} API key${p.maxApiKeys === 1 ? "" : "s"}`,
       `${n(p.webUploadsPerHour)} website uploads per hour`,
       `${n(p.apiUploadsPerHour)} API uploads per hour`,
+      ...(p.privateAlbums && id === "pro" ? ["Private albums"] : []),
       ...(id === "free"
         ? base
         : [`Everything in ${PLANS[PLAN_IDS[rank - 1]!].label}`]),
@@ -182,6 +186,7 @@ export default async function PricingPage({
     label: "Enterprise",
     tagline: "For high volumes, your own limits and an agreement.",
     price: null,
+    yearPrice: null,
     features: [
       "Custom API keys and upload limits",
       "Everything in Business",
@@ -258,6 +263,16 @@ export default async function PricingPage({
                   <th scope="row">Storage</th>
                   {PLAN_IDS.map((id) => (
                     <td key={id}>{formatStorage(PLANS[id].storageBytes)}</td>
+                  ))}
+                </tr>
+                <tr>
+                  <th scope="row">Albums</th>
+                  {PLAN_IDS.map((id) => (
+                    <td key={id}>
+                      {PLANS[id].privateAlbums
+                        ? "Public, unlisted and private"
+                        : "Public and unlisted"}
+                    </td>
                   ))}
                 </tr>
                 <tr>
@@ -364,6 +379,19 @@ export default async function PricingPage({
             <p>
               New API uploads are refused with a message saying when you can
               upload again. Your existing images and links keep working.
+            </p>
+          </details>
+          <details>
+            <summary>
+              What&apos;s the difference between public, unlisted and private
+              albums?
+            </summary>
+            <p>
+              Anyone with the link can open a public or unlisted album; public
+              albums are also shown on your profile and can appear in search
+              engines. A private album can only be opened by you, and is part of
+              Pro and Business. Images in any album keep their own links, so an
+              image you&apos;ve shared stays reachable through that link.
             </p>
           </details>
           <details>

@@ -1,6 +1,7 @@
 import { config } from "@/lib/config";
 import { ACCEPTED_MIME } from "@/lib/filetype";
 import { ApiError, apiOk, handleError } from "@/lib/http";
+import { albumParam } from "@/lib/albums";
 import { createPendingImage, parseExpiration } from "@/lib/images";
 import { presignPut } from "@/lib/s3";
 import { webUploadGate } from "@/lib/webupload";
@@ -12,6 +13,7 @@ type Body = {
   size?: number;
   type?: string;
   expiration?: number | string;
+  album?: string;
 };
 
 /** Step 1 of a browser upload: reserve an id and get a presigned PUT URL for the bytes. */
@@ -47,6 +49,7 @@ export async function POST(req: Request) {
       uploaderIp: ip,
       userId: user?.id,
       bytes: size,
+      albumId: albumParam(body.album),
     });
     const uploadUrl = await presignPut(img.upload_key, type, size);
 

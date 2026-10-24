@@ -8,11 +8,13 @@ export type Plan = {
   label: string;
   maxApiKeys: number;
   apiUploadsPerHour: number;
+  /** Can make albums private (only the owner can open them). Public and unlisted albums are on every plan. */
+  privateAlbums: boolean;
   /** Total storage for the account's images (originals plus thumbnails), in bytes. */
   storageBytes: number;
   /** Uploads per hour from the website (drag and drop, paste, URL), counted separately from API uploads. */
   webUploadsPerHour: number;
-  /** Monthly price in PRICE_CURRENCY (default LKR; 0 = free). Yearly billing is 10 × monthly: two months free. */
+  /** Monthly price in PRICE_CURRENCY (default LKR; 0 = free). Yearly billing is YEARLY_MONTHS × monthly. */
   price: number;
   tagline: string;
   /** Extra lines shown on the pricing page. Keep them to things the plan really includes. */
@@ -33,6 +35,10 @@ function price(name: string, fallback: number) {
   return fallback;
 }
 
+/** Months free when paying yearly (default 1): yearly price = (12 − free months) × monthly. */
+export const YEARLY_FREE_MONTHS = Math.min(11, int("YEARLY_FREE_MONTHS", 1));
+export const YEARLY_MONTHS = 12 - YEARLY_FREE_MONTHS;
+
 const GB = 1024 ** 3;
 /** Storage from the environment in GB (decimals allowed, e.g. 0.5). */
 function gb(name: string, fallback: number) {
@@ -48,6 +54,7 @@ export const PLANS: Record<PlanId, Plan> = {
     label: "Free",
     maxApiKeys: int("FREE_API_KEYS", 1),
     apiUploadsPerHour: int("FREE_API_UPLOADS_PER_HOUR", 10),
+    privateAlbums: false,
     storageBytes: gb("FREE_STORAGE_GB", 1),
     webUploadsPerHour: int("FREE_WEB_UPLOADS_PER_HOUR", 50),
     price: 0,
@@ -59,6 +66,7 @@ export const PLANS: Record<PlanId, Plan> = {
     label: "Pro",
     maxApiKeys: int("PRO_API_KEYS", 5),
     apiUploadsPerHour: int("PRO_API_UPLOADS_PER_HOUR", 500),
+    privateAlbums: true,
     storageBytes: gb("PRO_STORAGE_GB", 50),
     webUploadsPerHour: int("PRO_WEB_UPLOADS_PER_HOUR", paidWebDefault),
     price: price("PRO", 990),
@@ -70,6 +78,7 @@ export const PLANS: Record<PlanId, Plan> = {
     label: "Business",
     maxApiKeys: int("BUSINESS_API_KEYS", 20),
     apiUploadsPerHour: int("BUSINESS_API_UPLOADS_PER_HOUR", 5000),
+    privateAlbums: true,
     storageBytes: gb("BUSINESS_STORAGE_GB", 500),
     webUploadsPerHour: int("BUSINESS_WEB_UPLOADS_PER_HOUR", paidWebDefault),
     price: price("BUSINESS", 4900),

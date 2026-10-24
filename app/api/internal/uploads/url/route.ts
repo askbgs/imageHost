@@ -3,6 +3,7 @@ import { fetchRemoteImage } from "@/lib/fetch-remote";
 import { ApiError, apiOk, handleError } from "@/lib/http";
 import { parseExpiration } from "@/lib/images";
 import { ingestBytes } from "@/lib/ingest";
+import { albumParam } from "@/lib/albums";
 import { webUploadGate } from "@/lib/webupload";
 
 export const runtime = "nodejs";
@@ -11,7 +12,11 @@ export const maxDuration = 90;
 /** Web uploader: import an image from a public URL (guest, rate-limited per IP). */
 export async function POST(req: Request) {
   try {
-    const body = (await req.json().catch(() => null)) as { url?: string; expiration?: number } | null;
+    const body = (await req.json().catch(() => null)) as {
+      url?: string;
+      expiration?: number;
+      album?: string;
+    } | null;
     if (!body?.url) throw new ApiError("invalid_request", "url is required");
     const expirationSeconds = parseExpiration(body.expiration);
 
@@ -24,6 +29,7 @@ export async function POST(req: Request) {
       expirationSeconds,
       uploaderIp: ip,
       userId: user?.id,
+      albumId: albumParam(body.album),
     });
     return apiOk(result.data, result.done ? 200 : 202);
   } catch (err) {

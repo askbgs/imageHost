@@ -32,7 +32,7 @@ export function KeyCreator({ siteUrl, limitNote }: { siteUrl: string; limitNote:
               type="text"
               readOnly
               aria-label="Example command"
-              value={`curl -X POST "${siteUrl}/1/upload?key=${state.key}" -F "image=@photo.jpg"`}
+              value={`curl -X POST "${siteUrl}/v1/upload?key=${state.key}" -F "image=@photo.jpg"`}
               onFocus={(e) => e.currentTarget.select()}
             />
           </div>

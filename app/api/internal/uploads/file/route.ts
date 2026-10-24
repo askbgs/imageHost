@@ -2,6 +2,7 @@ import { config } from "@/lib/config";
 import { ApiError, apiOk, handleError } from "@/lib/http";
 import { parseExpiration } from "@/lib/images";
 import { ingestBytes } from "@/lib/ingest";
+import { albumParam } from "@/lib/albums";
 import { webUploadGate } from "@/lib/webupload";
 
 export const runtime = "nodejs";
@@ -49,6 +50,7 @@ export async function POST(req: Request) {
       expirationSeconds: parseExpiration(form.get("expiration")),
       uploaderIp: ip,
       userId: user?.id,
+      albumId: albumParam(form.get("album")),
     });
     return apiOk(result.data, result.done ? 200 : 202);
   } catch (err) {

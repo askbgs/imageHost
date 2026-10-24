@@ -12,11 +12,12 @@ This covers Phases 1 to 2 of the spec and most of Phase 3: core upload, the publ
 | Storage | Cloudflare R2. Images are served from your R2 custom domain through Cloudflare's CDN, with free egress; deletions purge the CDN cache when a Cloudflare token is set. See [R2.md](R2.md) |
 | Upload pipeline | Browser uploads go straight to R2 with signed URLs; a worker re-encodes each image with sharp (strips EXIF and GPS, applies orientation, neutralises hidden payloads) and makes a 180 px square thumbnail and a 640 px medium size |
 | Viewer page | `/{id}` with Open Graph tags for link previews, share codes, download, and a report form; flagged images are blurred |
-| API | `POST /1/upload` (file, base64 or URL), `GET /1/images`, `GET` and `DELETE /1/images/{id}`, `POST /1/reports`; docs at `/api-docs` |
+| API | `POST /v1/upload` (file, base64 or URL), `GET /v1/images`, `GET` and `DELETE /v1/images/{id}`, `POST /v1/reports`; docs at `/api-docs` |
 | Delete links | Every upload gets a secret delete link, so guests can remove their images |
 | Expiry | 5 minutes to 6 months; a worker job removes expired and abandoned uploads every 10 minutes |
 | Safety | Magic-byte type checks (SVG and HEIC rejected), 32 MB and 100-megapixel caps, SSRF protection for URL uploads, per-IP and per-key rate limits, exact-hash block list, optional NSFW scoring hook |
 | Social sign-in | GitHub, Google and Facebook, each enabled by setting its client ID and secret. See [SOCIAL_LOGIN.md](SOCIAL_LOGIN.md) |
+| Albums | Group images into albums and share each with one link (/a/{id}). Public (also listed on /u/{username}), unlisted, or private on Pro and Business. Upload straight into an album from the website or with the API `album` field |
 | Plans and payments | Free, Pro and Business plans with their own storage (1 GB / 50 GB / 500 GB by default), API and upload limits. Monthly or yearly subscriptions through Paddle: checkout, upgrades, cancellation and invoices. See [PADDLE.md](PADDLE.md) |
 | Accounts | Sign up and sign in with email and password (scrypt hashes, server-side sessions in httpOnly cookies, lockout after repeated wrong passwords). Uploading from the website requires an account by default |
 | My images | Every upload is saved to the uploader's library: search, copy links, open, delete |
@@ -57,10 +58,10 @@ docker compose exec app node dist/create-api-key.js you@example.com "n8n automat
 Arguments: email, a name for the key, uploads per hour. The key is printed once; only its hash is stored.
 
 ```bash
-curl -X POST "https://yoursite.com/1/upload?key=YOUR_KEY" -F "image=@photo.jpg"
+curl -X POST "https://yoursite.com/v1/upload?key=YOUR_KEY" -F "image=@photo.jpg"
 ```
 
-Use it from ShareX (custom uploader), WordPress plugins that accept a custom upload endpoint, or an n8n HTTP Request node: send `POST https://yoursite.com/1/upload` with your key and an `image` field.
+Use it from ShareX (custom uploader), WordPress plugins that accept a custom upload endpoint, or an n8n HTTP Request node: send `POST https://yoursite.com/v1/upload` with your key and an `image` field.
 
 ### Moving existing images to R2
 
@@ -130,7 +131,7 @@ app/                Next.js routes
   account/            My images, API keys, settings
   actions/            server actions for auth and account changes
   admin/              moderation queue (admin accounts only)
-  api/1/              public API
+  api/v1/             public API, version 1
   api/internal/       browser upload flow
 components/         Uploader, ShareCodes, ImageTile, KeyCreator, AccountMenu, Toast and forms
 lib/                config, db, s3, queue, rate limit, processing, moderation, links, auth, password

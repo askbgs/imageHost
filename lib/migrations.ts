@@ -212,4 +212,46 @@ UPDATE images i
 CREATE INDEX IF NOT EXISTS idx_images_user_status ON images (user_id, status);
 `,
   },
+  {
+    id: 7,
+    name: "albums",
+    sql: `
+-- The first schema created a placeholder albums table (id, user_id, title, privacy, created_at)
+-- and images.album_id, which nothing used. Upgrade that table in place, keeping any rows.
+ALTER TABLE albums ADD COLUMN IF NOT EXISTS description    TEXT;
+ALTER TABLE albums ADD COLUMN IF NOT EXISTS visibility     TEXT NOT NULL DEFAULT 'unlisted';
+ALTER TABLE albums ADD COLUMN IF NOT EXISTS cover_image_id TEXT REFERENCES images(id) ON DELETE SET NULL;
+ALTER TABLE albums ADD COLUMN IF NOT EXISTS updated_at     TIMESTAMPTZ NOT NULL DEFAULT now();
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'albums' AND column_name = 'privacy') THEN
+    UPDATE albums SET visibility = privacy WHERE privacy IN ('public', 'unlisted', 'private');
+    ALTER TABLE albums DROP COLUMN privacy;
+  END IF;
+END $$;
+ALTER TABLE albums DROP CONSTRAINT IF EXISTS albums_visibility_check;
+ALTER TABLE albums ADD CONSTRAINT albums_visibility_check CHECK (visibility IN ('public', 'unlisted', 'private'));
+CREATE INDEX IF NOT EXISTS idx_albums_user ON albums (user_id, updated_at DESC);
+
+-- An image can be in several albums.
+CREATE TABLE IF NOT EXISTS album_images (
+  album_id  TEXT NOT NULL REFERENCES albums(id) ON DELETE CASCADE,
+  image_id  TEXT NOT NULL REFERENCES images(id) ON DELETE CASCADE,
+  position  INT NOT NULL DEFAULT 0,
+  added_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (album_id, image_id)
+);
+CREATE INDEX IF NOT EXISTS idx_album_images_image ON album_images (image_id);
+CREATE INDEX IF NOT EXISTS idx_album_images_order ON album_images (album_id, position);
+
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'images' AND column_name = 'album_id') THEN
+    INSERT INTO album_images (album_id, image_id, position)
+      SELECT album_id, id, row_number() OVER (PARTITION BY album_id ORDER BY created_at)
+        FROM images WHERE album_id IS NOT NULL
+      ON CONFLICT DO NOTHING;
+    ALTER TABLE images DROP COLUMN album_id;
+  END IF;
+END $$;
+`,
+  },
 ];

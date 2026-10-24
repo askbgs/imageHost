@@ -12,7 +12,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { config } from "./config";
 import { pool, query, queryOne } from "./db";
 import { isCurrency, priceCurrency, type CurrencyCode } from "./fx";
-import { PLANS, type PlanId } from "./plans";
+import { PLANS, YEARLY_MONTHS, type PlanId } from "./plans";
 
 export type PaidPlanId = Exclude<PlanId, "free">;
 export type Interval = "month" | "year";
@@ -160,7 +160,10 @@ const minorDigits = (currency: string) =>
 function configPricing(): PlanPricing {
   const plans = {} as PlanPricing["plans"];
   for (const id of PAID_PLANS)
-    plans[id] = { month: PLANS[id].price, year: PLANS[id].price * 10 };
+    plans[id] = {
+      month: PLANS[id].price,
+      year: PLANS[id].price * YEARLY_MONTHS,
+    };
   return { currency: priceCurrency(), plans, source: "config" };
 }
 

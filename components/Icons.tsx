@@ -99,3 +99,33 @@ export const IconX = (p: P) => (
     <path d="M5 5l10 10M15 5L5 15" />
   </Svg>
 );
+export const IconAlbum = (p: P) => (
+  <Svg {...p}>
+    <rect x="2.5" y="5.5" width="12" height="11" rx="1.8" />
+    <path d="M5.5 3.5h10a2 2 0 0 1 2 2v8.5" />
+    <path d="M14.5 13.5l-3.3-3.3-5.7 5.8" />
+    <circle cx="6.6" cy="9" r="1.1" />
+  </Svg>
+);
+export const IconLock = (p: P) => (
+  <Svg {...p}>
+    <rect x="4" y="9" width="12" height="8.5" rx="1.8" />
+    <path d="M6.8 9V6.6a3.2 3.2 0 0 1 6.4 0V9" />
+  </Svg>
+);
+export const IconGlobe = (p: P) => (
+  <Svg {...p}>
+    <circle cx="10" cy="10" r="7.2" />
+    <path d="M2.8 10h14.4M10 2.8c2 2 3 4.4 3 7.2s-1 5.2-3 7.2c-2-2-3-4.4-3-7.2s1-5.2 3-7.2z" />
+  </Svg>
+);
+export const IconPlus = (p: P) => (
+  <Svg {...p}>
+    <path d="M10 4v12M4 10h12" />
+  </Svg>
+);
+export const IconPencil = (p: P) => (
+  <Svg {...p}>
+    <path d="M12.5 4.5l3 3L7 16H4v-3l8.5-8.5zM11 6l3 3" />
+  </Svg>
+);

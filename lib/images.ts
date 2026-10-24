@@ -5,6 +5,7 @@ import { newDeleteToken, newImageId, newUploadSuffix } from "./ids";
 import type { ImageRow, VariantRow } from "./links";
 import { purgeUrls } from "./cdn";
 import { links } from "./links";
+import { addImagesToAlbum, assertAlbumOwner } from "./albums";
 import { assertStorageAvailable } from "./quota";
 import { deleteObjects } from "./s3";
 import { safeStem } from "./filetype";
@@ -40,6 +41,8 @@ export async function createPendingImage(opts: {
   apiKeyId?: string | null;
   /** Size of the file being uploaded (received, or declared for a direct upload). Counts against the quota. */
   bytes: number;
+  /** Put the image in this album (must belong to the uploader). */
+  albumId?: string | null;
 }): Promise<ImageRow> {
   // Retry on the (very unlikely) id collision.
   for (let attempt = 0; attempt < 3; attempt++) {
@@ -48,6 +51,8 @@ export async function createPendingImage(opts: {
     try {
       await client.query("BEGIN");
       // Accounts have a storage allowance; refuse the upload before anything is stored.
+      if (opts.albumId)
+        await assertAlbumOwner(client, opts.albumId, opts.userId);
       if (opts.userId)
         await assertStorageAvailable(client, opts.userId, opts.bytes);
       const { rows } = await client.query<ImageRow>(
@@ -76,6 +81,8 @@ export async function createPendingImage(opts: {
           opts.bytes,
         ],
       );
+      if (opts.albumId && opts.userId)
+        await addImagesToAlbum(opts.albumId, opts.userId, [id], client);
       await client.query("COMMIT");
       return rows[0]!;
     } catch (err) {

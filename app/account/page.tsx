@@ -1,29 +1,19 @@
 import Link from "next/link";
 import { ImageGallery } from "@/components/ImageGallery";
 import type { GalleryImage } from "@/components/Lightbox";
-import { IconUpload } from "@/components/Icons";
+import { IconAlbum, IconUpload } from "@/components/Icons";
 import { StorageMeter } from "@/components/StorageMeter";
 import { requireUser } from "@/lib/auth";
 import { query } from "@/lib/db";
-import { embedCodes, links, type ImageRow } from "@/lib/links";
+import { toGalleryImages } from "@/lib/gallery";
+import { type ImageRow } from "@/lib/links";
+import { myAlbumOptions } from "@/app/actions/albums";
+
 import { storageUsage } from "@/lib/quota";
 
 export const metadata = { title: "My images" };
 
 const PER_PAGE = 48;
-
-function formatBytes(n: number) {
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${Math.max(1, Math.round(n / 1024))} KB`;
-  return `${(n / 1024 / 1024).toFixed(1)} MB`;
-}
-
-function timeLeft(date: Date) {
-  const s = (new Date(date).getTime() - Date.now()) / 1000;
-  if (s < 3600) return `${Math.max(1, Math.round(s / 60))} min`;
-  if (s < 86400) return `${Math.round(s / 3600)} h`;
-  return `${Math.round(s / 86400)} d`;
-}
 
 type Props = {
   searchParams: Promise<{ q?: string; page?: string; source?: string }>;
@@ -63,47 +53,19 @@ export default async function MyImages({ searchParams }: Props) {
       GROUP BY source`,
     [user.id, search, `%${search.replace(/[\\%_]/g, (m) => `\\${m}`)}%`],
   );
-  const usage = await storageUsage(user.id);
+  const [usage, albums] = await Promise.all([
+    storageUsage(user.id),
+    myAlbumOptions(),
+  ]);
   const countOf = (s: string) =>
     Number(counts.find((c) => c.source === s)?.n ?? 0);
   const allCount = countOf("web") + countOf("api");
   const total = Number(rows[0]?.total ?? 0);
   const pages = Math.max(1, Math.ceil(total / PER_PAGE));
 
-  const tiles: GalleryImage[] = rows.map((r, i) => {
-    const l = links(r);
-    const c = embedCodes(r);
-    return {
-      id: r.id,
-      title: r.title || r.slug,
-      slug: r.slug,
-      thumb: l.thumb,
-      medium: l.medium,
-      direct: l.direct,
-      viewer: l.viewer,
-      width: r.width ?? 0,
-      height: r.height ?? 0,
-      size: formatBytes(Number(r.size_bytes ?? 0)),
-      uploaded: new Date(r.created_at).toLocaleDateString("en-GB", {
-        day: "numeric",
-        month: "short",
-        year: "numeric",
-      }),
-      flagged: r.status === "flagged",
-      source: r.source === "api" ? "api" : "web",
-      keyName: r.key_name,
-      expires: r.expires_at ? timeLeft(r.expires_at) : null,
-      frame: String(total - ((page - 1) * PER_PAGE + i)).padStart(2, "0"),
-      codes: {
-        viewer: c.viewer,
-        direct: c.direct,
-        html_full: c.html_full,
-        html_thumb: c.html_thumb,
-        bbcode_full: c.bbcode_full,
-        bbcode_thumb: c.bbcode_thumb,
-        markdown: c.markdown,
-      },
-    };
+  const tiles: GalleryImage[] = toGalleryImages(rows, {
+    total,
+    offset: (page - 1) * PER_PAGE,
   });
 
   const qs = (p: number) =>
@@ -122,9 +84,15 @@ export default async function MyImages({ searchParams }: Props) {
               : `${total} image${total === 1 ? "" : "s"}${source ? ` uploaded ${source === "api" ? "with the API" : "on the website"}` : ""}${search ? ` matching “${search}”` : ""}`}
           </p>
         </div>
-        <Link href="/" className="btn primary">
-          <IconUpload size={16} /> Upload
-        </Link>
+        <div className="row" style={{ gap: 8 }}>
+          <Link href="/account/albums" className="btn secondary">
+            <IconAlbum size={16} /> Albums
+            {albums.length ? ` (${albums.length})` : ""}
+          </Link>
+          <Link href="/" className="btn primary">
+            <IconUpload size={16} /> Upload
+          </Link>
+        </div>
       </div>
 
       <section className="panel storage-panel" aria-label="Storage">
@@ -205,7 +173,11 @@ export default async function MyImages({ searchParams }: Props) {
           )}
         </div>
       ) : (
-        <ImageGallery initial={tiles} />
+        <ImageGallery
+          initial={tiles}
+          albums={albums}
+          canPrivate={usage.plan.privateAlbums}
+        />
       )}
 
       {pages > 1 && (

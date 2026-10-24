@@ -4,6 +4,7 @@ import { StorageNotice } from "@/components/StorageMeter";
 import { Uploader } from "@/components/Uploader";
 import { currentUser, displayName } from "@/lib/auth";
 import { config } from "@/lib/config";
+import { query } from "@/lib/db";
 import { storageUsage } from "@/lib/quota";
 
 function Features() {
@@ -47,9 +48,9 @@ function Features() {
 export default async function Home({
   searchParams,
 }: {
-  searchParams: Promise<{ deleted?: string }>;
+  searchParams: Promise<{ deleted?: string; album?: string }>;
 }) {
-  const { deleted } = await searchParams;
+  const { deleted, album } = await searchParams;
   const user = await currentUser();
   const canUpload = !!user || !config.requireLoginToUpload;
 
@@ -101,7 +102,15 @@ export default async function Home({
     );
   }
 
-  const usage = user ? await storageUsage(user.id).catch(() => null) : null;
+  const [usage, albums] = user
+    ? await Promise.all([
+        storageUsage(user.id).catch(() => null),
+        query<{ id: string; title: string }>(
+          `SELECT id, title FROM albums WHERE user_id = $1 ORDER BY updated_at DESC`,
+          [user.id],
+        ),
+      ])
+    : [null, []];
 
   return (
     <>
@@ -123,7 +132,12 @@ export default async function Home({
         </p>
       </section>
       {usage && <StorageNotice usage={usage} />}
-      <Uploader maxBytes={config.maxUploadBytes} mode={config.uploadMode} />
+      <Uploader
+        maxBytes={config.maxUploadBytes}
+        mode={config.uploadMode}
+        albums={user ? albums : undefined}
+        initialAlbum={album}
+      />
       {!user && <Features />}
     </>
   );

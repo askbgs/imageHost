@@ -18,8 +18,8 @@ export type PriceCard = {
   tagline: string;
   /** Monthly price in the base price currency; null = custom. */
   price: number | null;
-  /** Yearly price; null = not offered yearly; undefined = 10 × monthly. */
-  yearPrice?: number | null;
+  /** Yearly price in the base currency; null = not offered yearly. */
+  yearPrice: number | null;
   features: string[];
   recommended?: boolean;
   current?: boolean;
@@ -46,7 +46,7 @@ export function PricingCards({
   paddle?: PaddleSetup | null;
   /** The price of the user's live subscription, if any. */
   currentPriceId?: string | null;
-  /** E.g. "2 months free"; null hides the yearly option. */
+  /** E.g. "1 month free"; null hides the yearly option. */
   yearlyNote: string | null;
 }) {
   const [yearly, setYearly] = useState(false);
@@ -127,12 +127,7 @@ export function PricingCards({
 
       <div className="price-grid">
         {cards.map((c) => {
-          const yearAmount =
-            c.price === null
-              ? null
-              : c.yearPrice === undefined
-                ? c.price * 10
-                : c.yearPrice;
+          const yearAmount = c.price === null ? null : c.yearPrice;
           const showYear = yearly && yearAmount !== null && c.price !== 0;
           const amount =
             c.price === null ? null : showYear ? yearAmount! : c.price;

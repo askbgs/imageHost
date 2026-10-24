@@ -13,7 +13,7 @@ export function ReportForm({ imageId }: { imageId: string }) {
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setState("sending");
-    const res = await fetch("/api/1/reports", {
+    const res = await fetch("/api/v1/reports", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ image_id: imageId, reason, details }),
