@@ -2,7 +2,7 @@ import { config } from "./config";
 import { MIME, sniffImage } from "./filetype";
 import { ApiError } from "./http";
 import { createPendingImage, failureToError, getImage, getVariants } from "./images";
-import { imgbbData } from "./links";
+import { imageData } from "./links";
 import { processAndWait } from "./queue";
 import { putObject } from "./s3";
 
@@ -13,10 +13,10 @@ export async function finalize(imageId: string) {
   if (!img) throw new ApiError("server_error", "Image disappeared during processing");
   if (result === null) {
     // Still running: return what we have; the client can poll GET /1/images/{id}.
-    return { done: false as const, data: imgbbData(img, []) };
+    return { done: false as const, data: imageData(img, []) };
   }
   if (result.status === "failed") throw failureToError(result.reason ?? img.fail_reason);
-  return { done: true as const, data: imgbbData(img, await getVariants(imageId)) };
+  return { done: true as const, data: imageData(img, await getVariants(imageId)) };
 }
 
 /** Server-side ingest used by the API: bytes are already in memory. */

@@ -17,26 +17,81 @@ function int(name: string, fallback: number): number {
 
 const siteUrl = env("SITE_URL", "http://localhost:3000").replace(/\/$/, "");
 
+// ---- Storage: Cloudflare R2 (default) or any S3-compatible service ----
+// R2 is used whenever R2_ACCOUNT_ID is set; the S3_* variables are the fallback
+// (for example MinIO for local development).
+const r2Account = process.env.R2_ACCOUNT_ID || "";
+const r2Jurisdiction = (process.env.R2_JURISDICTION || "").toLowerCase(); // "", "eu" or "fedramp"
+const r2Endpoint = r2Account
+  ? `https://${r2Account}${r2Jurisdiction ? `.${r2Jurisdiction}` : ""}.r2.cloudflarestorage.com`
+  : "";
+// Public custom domain connected to the bucket, e.g. https://img.yoursite.com
+const r2PublicUrl = (process.env.R2_PUBLIC_URL || "").replace(/\/$/, "");
+
+const storage = r2Account
+  ? {
+      driver: "r2" as const,
+      endpoint: r2Endpoint,
+      publicEndpoint: r2Endpoint,
+      region: "auto",
+      bucket: env("R2_BUCKET"),
+      accessKeyId: env("R2_ACCESS_KEY_ID"),
+      secretAccessKey: env("R2_SECRET_ACCESS_KEY"),
+      forcePathStyle: false,
+    }
+  : {
+      driver: "s3" as const,
+      // Endpoint the app and worker use (inside Docker: http://minio:9000).
+      endpoint: process.env.S3_ENDPOINT || undefined,
+      // Endpoint browsers use for presigned PUTs. Defaults to endpoint.
+      publicEndpoint: process.env.S3_PUBLIC_ENDPOINT || process.env.S3_ENDPOINT || undefined,
+      region: env("S3_REGION", "auto"),
+      bucket: env("S3_BUCKET", "imghost"),
+      accessKeyId: env("S3_ACCESS_KEY_ID", "minioadmin"),
+      secretAccessKey: env("S3_SECRET_ACCESS_KEY", "minioadmin"),
+      forcePathStyle: env("S3_FORCE_PATH_STYLE", "true") === "true",
+    };
+
+// How /i/... image links are served:
+//   "public":   links point straight at the bucket's public domain (R2 custom domain + Cloudflare CDN)
+//   "redirect": links on this site redirect to a short-lived signed storage URL
+//   "proxy":    links on this site stream the bytes through the app
+// Default: "public" when R2_PUBLIC_URL is set, "redirect" for R2 without it, "proxy" otherwise.
+type Delivery = "public" | "redirect" | "proxy";
+const deliveryRaw = (process.env.IMAGE_DELIVERY || "").toLowerCase();
+const imageDelivery: Delivery =
+  deliveryRaw === "public" || deliveryRaw === "redirect" || deliveryRaw === "proxy"
+    ? deliveryRaw
+    : r2PublicUrl
+      ? "public"
+      : storage.driver === "r2"
+        ? "redirect"
+        : "proxy";
+if (imageDelivery === "public" && !r2PublicUrl && !process.env.IMAGE_BASE_URL) {
+  throw new Error("IMAGE_DELIVERY=public needs R2_PUBLIC_URL (the bucket's custom domain)");
+}
+
 export const config = {
   siteName: env("SITE_NAME", "imghost"),
   siteUrl,
-  // Where direct image links point. Defaults to this app's /i route; in production
-  // map a separate host (i.yoursite.com) to /i on this app through the reverse proxy.
-  imageBaseUrl: env("IMAGE_BASE_URL", `${siteUrl}/i`).replace(/\/$/, ""),
+  // Where direct image links point. With public delivery this is the bucket's domain;
+  // otherwise this app's /i route (or a host you map to it).
+  imageBaseUrl: (imageDelivery === "public"
+    ? process.env.IMAGE_BASE_URL || r2PublicUrl
+    : env("IMAGE_BASE_URL", `${siteUrl}/i`)
+  ).replace(/\/$/, ""),
 
   databaseUrl: env("DATABASE_URL", "postgres://imghost:imghost@localhost:5432/imghost"),
   redisUrl: env("REDIS_URL", "redis://localhost:6379"),
 
-  s3: {
-    // Endpoint the app and worker use (inside Docker: http://minio:9000).
-    endpoint: process.env.S3_ENDPOINT || undefined,
-    // Endpoint browsers use for presigned PUTs (e.g. https://s3.yoursite.com). Defaults to endpoint.
-    publicEndpoint: process.env.S3_PUBLIC_ENDPOINT || process.env.S3_ENDPOINT || undefined,
-    region: env("S3_REGION", "auto"),
-    bucket: env("S3_BUCKET", "imghost"),
-    accessKeyId: env("S3_ACCESS_KEY_ID", "minioadmin"),
-    secretAccessKey: env("S3_SECRET_ACCESS_KEY", "minioadmin"),
-    forcePathStyle: env("S3_FORCE_PATH_STYLE", "true") === "true",
+  s3: storage,
+  imageDelivery,
+
+  // Optional: purge Cloudflare's cache when images are deleted (public delivery).
+  // Token needs the "Cache Purge" permission on the zone of R2_PUBLIC_URL.
+  cloudflare: {
+    zoneId: process.env.CLOUDFLARE_ZONE_ID || "",
+    apiToken: process.env.CLOUDFLARE_API_TOKEN || "",
   },
 
   maxUploadBytes: int("MAX_UPLOAD_MB", 32) * 1024 * 1024,
@@ -62,10 +117,6 @@ export const config = {
   // "direct": browsers PUT to storage with presigned URLs (needs bucket CORS).
   // "server": browsers POST the file to this app, which stores it (works everywhere).
   uploadMode: env("UPLOAD_MODE", "direct") === "server" ? ("server" as const) : ("direct" as const),
-  // "proxy": /i/... streams bytes through this app (best behind a CDN).
-  // "redirect": /i/... redirects to a short-lived signed storage URL, so bytes come
-  // straight from the bucket (Railway bucket egress is free; service egress is not).
-  imageDelivery: env("IMAGE_DELIVERY", "proxy") === "redirect" ? ("redirect" as const) : ("proxy" as const),
 
   // Accounts
   allowSignup: env("ALLOW_SIGNUP", "true") === "true",

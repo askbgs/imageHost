@@ -446,6 +446,30 @@ kbd {
 .auth h1 { margin: 0; font-size: 30px; }
 .auth .sub { margin: -10px 0 4px; color: var(--muted); font-size: 15px; }
 .auth form { display: grid; gap: 16px; }
+.social { display: grid; gap: 10px; }
+.social .divider-or { width: 100%; margin-top: 6px; }
+.social-btn { justify-content: flex-start; gap: 12px; padding: 10px 14px; font-weight: 500; }
+.social-btn .social-arrow { margin-left: auto; transform: rotate(-90deg); color: var(--faint); }
+.social-mark {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  font-size: 13px;
+  color: #fff;
+  background: var(--ink);
+  flex-shrink: 0;
+}
+.social-google .social-mark { background: #1a73e8; }
+.social-facebook .social-mark { background: #1877f2; font-family: Georgia, serif; font-size: 16px; }
+.social-github .social-mark { background: #24292f; }
+.methods { display: grid; border: 1px solid var(--line); border-radius: var(--radius-m); overflow: hidden; }
+.method { display: flex; align-items: center; gap: 12px; padding: 12px 14px; background: var(--sheet); }
+.method + .method { border-top: 1px solid var(--line); }
+.method .who { min-width: 0; flex: 1; display: grid; }
+.method .who span { font-size: 13px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .auth .switch { text-align: center; font-size: 14px; color: var(--muted); margin: 4px 0 0; }
 
 /* ---------- Page header and sub-navigation ---------- */

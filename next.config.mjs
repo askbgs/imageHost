@@ -5,7 +5,7 @@ const nextConfig = {
   poweredByHeader: false,
   async rewrites() {
     return [
-      // ImgBB-compatible public API paths: https://api.yoursite.com/1/upload
+      // Public API paths: https://yoursite.com/1/upload
       { source: "/1/:path*", destination: "/api/1/:path*" },
     ];
   },

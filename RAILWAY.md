@@ -1,13 +1,8 @@
 # Deploy on Railway
 
-You'll create five things in one Railway project: a **web** service and a **worker** service (both from this repo), plus **Postgres**, **Redis** and a **Bucket**. Railway builds both services from the `Dockerfile`; they differ only in their start command.
+You'll create four things in one Railway project: a **web** service and a **worker** service (both from this repo), plus **Postgres** and **Redis**. Images are stored in **Cloudflare R2**, so set up the bucket first by following [R2.md](R2.md) steps 1 to 4.
 
-Railway buckets are private and have no public URLs, so this setup:
-
-- uploads through the app (`UPLOAD_MODE=server`), which needs no bucket CORS, and
-- serves images by redirecting `/i/...` links to short-lived signed bucket URLs (`IMAGE_DELIVERY=redirect`). Bucket egress is free on Railway, while service egress is $0.05/GB, so image bytes never pass through your service.
-
-Direct links stay permanent (`https://yoursite.com/i/{id}/photo.jpg`); only the redirect target changes.
+Railway builds both services from the `Dockerfile`; they differ only in their start command. Browsers upload straight to R2 and Cloudflare serves the images from your R2 domain, so image bytes never pass through Railway, where service egress costs $0.05/GB.
 
 ## 1. Push the code to GitHub
 
@@ -18,8 +13,6 @@ Create a private repository and push this folder to it.
 1. In Railway, choose **New Project → Deploy from GitHub repo** and pick the repository. Railway detects the `Dockerfile`. Rename this service to `web`.
 2. In the project canvas, choose **+ New → Database → PostgreSQL**. Leave its name as `Postgres`.
 3. Choose **+ New → Database → Redis**. Leave its name as `Redis`.
-4. Choose **+ New → Bucket**. Name it `Bucket`. Pick the region closest to your users; it can't be changed later.
-
 If you use different names, change the names inside `${{...}}` below to match.
 
 ## 3. Set the web service's variables
@@ -37,25 +30,33 @@ REQUIRE_LOGIN_TO_UPLOAD=true
 DATABASE_URL=${{Postgres.DATABASE_URL}}
 REDIS_URL=${{Redis.REDIS_URL}}
 
-S3_ENDPOINT=${{Bucket.ENDPOINT}}
-S3_PUBLIC_ENDPOINT=${{Bucket.ENDPOINT}}
-S3_BUCKET=${{Bucket.BUCKET}}
-S3_ACCESS_KEY_ID=${{Bucket.ACCESS_KEY_ID}}
-S3_SECRET_ACCESS_KEY=${{Bucket.SECRET_ACCESS_KEY}}
-S3_REGION=${{Bucket.REGION}}
-S3_FORCE_PATH_STYLE=false
+R2_ACCOUNT_ID=${{shared.R2_ACCOUNT_ID}}
+R2_ACCESS_KEY_ID=${{shared.R2_ACCESS_KEY_ID}}
+R2_SECRET_ACCESS_KEY=${{shared.R2_SECRET_ACCESS_KEY}}
+R2_BUCKET=${{shared.R2_BUCKET}}
+R2_PUBLIC_URL=${{shared.R2_PUBLIC_URL}}
+CLOUDFLARE_ZONE_ID=${{shared.CLOUDFLARE_ZONE_ID}}
+CLOUDFLARE_API_TOKEN=${{shared.CLOUDFLARE_API_TOKEN}}
 
-UPLOAD_MODE=server
-IMAGE_DELIVERY=redirect
+UPLOAD_MODE=direct
 CLIENT_IP_HEADER=x-real-ip
+
+# Social sign-in (optional, see SOCIAL_LOGIN.md); leave out any you don't use
+GITHUB_CLIENT_ID=
+GITHUB_CLIENT_SECRET=
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+FACEBOOK_CLIENT_ID=
+FACEBOOK_CLIENT_SECRET=
 
 MAX_UPLOAD_MB=32
 USER_UPLOADS_PER_HOUR=200
 REPORTS_PER_HOUR=10
 ```
 
+First add the R2 values once as **shared variables** (Project → **Settings → Shared Variables**): `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, `R2_PUBLIC_URL`, and, if you set up cache purging, `CLOUDFLARE_ZONE_ID` and `CLOUDFLARE_API_TOKEN`. Both services then reference them, as above.
+
 Notes:
-- `S3_FORCE_PATH_STYLE=false` matches Railway's default virtual-hosted URLs. If your bucket's **Credentials** tab says to use path-style URLs, set it to `true`.
 - `CLIENT_IP_HEADER=x-real-ip` makes rate limits use the client address that Railway's edge sets, rather than `X-Forwarded-For`, which callers can supply themselves.
 
 ## 4. Configure the web service
@@ -65,11 +66,10 @@ In **web → Settings**:
 | Setting | Value |
 | --- | --- |
 | Networking → Public Networking | **Generate Domain** (or add your custom domain) |
-| Deploy → Pre-deploy command | `node dist/migrate.js` |
 | Deploy → Healthcheck path | `/api/health` |
 | Deploy → Serverless (app sleeping) | Off |
 
-The pre-deploy command applies `db/schema.sql` before each release; it's safe to run repeatedly.
+You don't need a pre-deploy command. The web app and the worker create and upgrade the database tables themselves when they start. If you added `node dist/migrate.js` as a pre-deploy command earlier, you can keep it; it's harmless.
 
 Don't add a `railway.json`: Railway's config-as-code files are deprecated and stop being read on 1 December 2026, so set these in the dashboard.
 
@@ -83,13 +83,13 @@ Don't add a `railway.json`: Railway's config-as-code files are deprecated and st
 ```
 DATABASE_URL=${{Postgres.DATABASE_URL}}
 REDIS_URL=${{Redis.REDIS_URL}}
-S3_ENDPOINT=${{Bucket.ENDPOINT}}
-S3_PUBLIC_ENDPOINT=${{Bucket.ENDPOINT}}
-S3_BUCKET=${{Bucket.BUCKET}}
-S3_ACCESS_KEY_ID=${{Bucket.ACCESS_KEY_ID}}
-S3_SECRET_ACCESS_KEY=${{Bucket.SECRET_ACCESS_KEY}}
-S3_REGION=${{Bucket.REGION}}
-S3_FORCE_PATH_STYLE=false
+R2_ACCOUNT_ID=${{shared.R2_ACCOUNT_ID}}
+R2_ACCESS_KEY_ID=${{shared.R2_ACCESS_KEY_ID}}
+R2_SECRET_ACCESS_KEY=${{shared.R2_SECRET_ACCESS_KEY}}
+R2_BUCKET=${{shared.R2_BUCKET}}
+R2_PUBLIC_URL=${{shared.R2_PUBLIC_URL}}
+CLOUDFLARE_ZONE_ID=${{shared.CLOUDFLARE_ZONE_ID}}
+CLOUDFLARE_API_TOKEN=${{shared.CLOUDFLARE_API_TOKEN}}
 WORKER_CONCURRENCY=2
 ```
 
@@ -99,9 +99,10 @@ Add `MODERATION_WEBHOOK_URL` here too if you use NSFW scoring (it runs in the wo
 
 Deploy both services (Railway prompts you to deploy the staged changes). Then:
 
-1. Open `https://<your-domain>/api/health`; it should return `{"ok":true}`.
-2. Create an account, upload an image on the home page, and open its direct link.
-3. Watch **worker → Deployments → Logs** for lines like `[process] aB3xK9pQ → active`.
+1. Open `https://<your-domain>/api/health`. It should return `"ok": true` with `"schema": {"latest": 3, "applied": 3}`. If it says `tables missing or out of date`, check the web service's deploy logs for lines starting with `[migrate]`.
+2. Prepare the bucket (CORS for browser uploads, cleanup of raw uploads): `railway ssh --service web -- node dist/setup-bucket.js`. See [R2.md](R2.md) step 5 if it can't change the settings.
+3. Create an account, upload an image on the home page, and open its direct link; it should start with your R2 domain.
+4. Watch **worker → Deployments → Logs** for lines like `[process] aB3xK9pQ → active`.
 
 ## 7. Create your admin account
 
@@ -113,36 +114,40 @@ To issue a key from the command line instead, install the [Railway CLI](https://
 railway ssh --service web -- node dist/create-api-key.js you@example.com "n8n automations" 500
 ```
 
-## Custom domain
+## If tables are missing
 
-In **web → Settings → Networking**, add your domain and create the CNAME record Railway shows. Then change `SITE_URL` to `https://yoursite.com` and redeploy. Existing links keep working on the Railway domain as long as it stays attached.
+Earlier versions only created tables through the pre-deploy command, so a deploy without it left the database empty. This version creates them on startup. After redeploying, the deploy logs show:
 
-## Optional: direct browser uploads
-
-Uploading straight to the bucket saves the app from handling 32 MB request bodies. To try it, run:
-
-```bash
-railway ssh --service web -- node dist/setup-bucket.js
+```
+[migrate] applied 1: initial schema
+[migrate] applied 2: accounts and sessions
+[migrate] applied 3: social sign-in
 ```
 
-If it prints `CORS set`, change `UPLOAD_MODE` to `direct` on the web service and redeploy, then test an upload in the browser. If uploads fail with a CORS error, switch back to `server`.
+Existing data is kept: every step only adds what's missing. To run it by hand: `railway ssh --service web -- node dist/migrate.js`.
+
+## Custom domain
+
+In **web → Settings → Networking**, add your domain and create the CNAME record Railway shows. Then change `SITE_URL` to `https://yoursite.com`, update the callback URLs at GitHub, Google and Facebook (see [SOCIAL_LOGIN.md](SOCIAL_LOGIN.md)) and redeploy. Existing links keep working on the Railway domain as long as it stays attached.
+
+## Moving from a Railway bucket
+
+If you deployed an earlier version with a Railway bucket, copy its images into R2 with the migration in [R2.md](R2.md#moving-existing-images-to-r2), using the old bucket's **Credentials** tab as the `SOURCE_S3_*` values (`SOURCE_S3_FORCE_PATH_STYLE=false` unless the tab says path-style). Then remove the old `S3_*` variables and the bucket.
 
 ## Costs to expect
 
 | Item | Rate |
 | --- | --- |
-| Bucket storage | $0.015 per GB-month |
-| Bucket egress (image downloads via redirects) | Free |
-| Bucket API operations | Free |
-| Service egress (pages, API responses, redirects) | $0.05 per GB |
+| R2 storage | $0.015 per GB-month, first 10 GB free |
+| Image downloads (R2 and Cloudflare CDN) | Free |
+| Railway service egress (pages and API responses) | $0.05 per GB |
 | Compute for web, worker, Postgres, Redis | Per Railway's usage pricing |
 
 Image processing with sharp is memory-hungry on large images; give the worker at least 1 GB of memory.
 
 ## Differences from the Docker Compose setup
 
-- Railway has no bucket lifecycle rules, so the worker's cleanup job (every 10 minutes) removes abandoned uploads and expired images itself.
-- There's no Caddy or separate image hostname; images are served from `SITE_URL/i/...`.
-- Cloudflare in front of a redirect only caches the redirect, not the image. That's fine here, since bucket egress is free.
+- There's no Caddy; Railway provides HTTPS for the site, and Cloudflare serves the images.
+- Old site links (`https://yoursite.com/i/...`) forward to the R2 domain.
 
-Sources: [Railway Storage Buckets](https://docs.railway.com/storage-buckets), [Uploading and serving files](https://docs.railway.com/guides/storage-buckets-guide), [Understanding your bill](https://docs.railway.com/pricing/understanding-your-bill), [Config as Code deprecation](https://docs.railway.com/config-as-code/reference), [railway ssh](https://docs.railway.com/cli/ssh).
+Sources: [Understanding your bill](https://docs.railway.com/pricing/understanding-your-bill), [Config as Code deprecation](https://docs.railway.com/config-as-code/reference), [railway ssh](https://docs.railway.com/cli/ssh).

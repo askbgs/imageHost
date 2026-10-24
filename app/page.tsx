@@ -20,7 +20,7 @@ function Features() {
           <IconCode size={22} />
         </span>
         <h3>Upload from your apps</h3>
-        <p>Create API keys in your account. The API follows ImgBB&apos;s format, so ShareX and n8n work as they are.</p>
+        <p>Create API keys in your account and upload from scripts, ShareX, WordPress or n8n.</p>
       </div>
       <div className="feature">
         <span className="ico">
@@ -33,13 +33,19 @@ function Features() {
   );
 }
 
-export default async function Home() {
+export default async function Home({ searchParams }: { searchParams: Promise<{ deleted?: string }> }) {
+  const { deleted } = await searchParams;
   const user = await currentUser();
   const canUpload = !!user || !config.requireLoginToUpload;
 
   if (!canUpload) {
     return (
       <>
+        {deleted && (
+          <p className="alert ok" role="status" style={{ marginTop: 24 }}>
+            Your account and images were deleted.
+          </p>
+        )}
         <section className="hero">
           <h1>
             Drop an image.

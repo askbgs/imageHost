@@ -20,7 +20,6 @@ COPY --from=build --chown=app:app /app/node_modules ./node_modules
 COPY --from=build --chown=app:app /app/.next ./.next
 COPY --from=build --chown=app:app /app/dist ./dist
 COPY --from=build --chown=app:app /app/public ./public
-COPY --from=build --chown=app:app /app/db ./db
 COPY --from=build --chown=app:app /app/next.config.mjs ./
 USER app
 EXPOSE 3000

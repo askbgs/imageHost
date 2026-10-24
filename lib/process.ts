@@ -7,9 +7,11 @@ import { OUTPUT, sniffImage, type ImageKind } from "./filetype";
 import { getImage } from "./images";
 import type { ProcessResult } from "./queue";
 import { isBlockedHash, nsfwScore } from "./moderation";
-import { deleteObjects, getObjectBuffer, putObject } from "./s3";
+import { purgeUrls } from "./cdn";
+import { links } from "./links";
+import { deleteObjects, getObjectBuffer, objectCacheControl, putObject } from "./s3";
 
-const THUMB = 180; // square crop, like ImgBB thumbnails
+const THUMB = 180; // square crop
 const MEDIUM = 640; // longest-edge cap for the display size
 
 function encoder(img: Sharp, kind: (typeof OUTPUT)[ImageKind]["kind"]) {
@@ -94,17 +96,15 @@ export async function processImage(imageId: string): Promise<ProcessResult> {
   const width = original.info.width;
   const height = isAnimated ? (original.info.pageHeight ?? original.info.height) : original.info.height;
   const slug = `${img.slug.replace(/\.[^.]+$/, "")}.${out.ext}`;
-  const prefix = `i/${imageId}`;
-  const keys = {
-    original: `${prefix}/original.${out.ext}`,
-    thumb: `${prefix}/thumb.${out.ext}`,
-    medium: `${prefix}/medium.${out.ext}`,
-  };
+  // Keys mirror the public link paths ({id}/{file}, {id}/t/{file}, {id}/m/{file}), so a
+  // public bucket domain (R2 custom domain) can serve them without going through the app.
+  const keys = imageKeys(imageId, slug);
+  const cache = objectCacheControl(img.expires_at);
 
   await Promise.all([
-    putObject(keys.original, original.data, out.mime),
-    putObject(keys.thumb, thumb.data, out.mime),
-    putObject(keys.medium, medium.data, out.mime),
+    putObject(keys.original, original.data, out.mime, cache),
+    putObject(keys.thumb, thumb.data, out.mime, cache),
+    putObject(keys.medium, medium.data, out.mime, cache),
   ]);
 
   // Score a still frame of the medium size: smaller and enough for a classifier.
@@ -139,14 +139,18 @@ export async function processImage(imageId: string): Promise<ProcessResult> {
   return { status };
 }
 
+export function imageKeys(id: string, slug: string) {
+  return { original: `${id}/${slug}`, thumb: `${id}/t/${slug}`, medium: `${id}/m/${slug}` };
+}
+
 /** Remove expired images and uploads that were never completed. */
 export async function cleanup(): Promise<{ expired: number; stale: number }> {
-  const expired = await query<{ id: string; storage_key: string; upload_key: string }>(
-    `SELECT id, storage_key, upload_key FROM images
+  const expired = await query<{ id: string; slug: string; delete_token: string; storage_key: string; upload_key: string }>(
+    `SELECT id, slug, delete_token, storage_key, upload_key FROM images
       WHERE expires_at IS NOT NULL AND expires_at <= now() AND status <> 'removed' LIMIT 500`,
   );
-  const stale = await query<{ id: string; storage_key: string; upload_key: string }>(
-    `SELECT id, storage_key, upload_key FROM images
+  const stale = await query<{ id: string; slug: string; delete_token: string; storage_key: string; upload_key: string }>(
+    `SELECT id, slug, delete_token, storage_key, upload_key FROM images
       WHERE (status = 'pending' AND created_at < now() - interval '1 hour')
          OR (status = 'failed' AND created_at < now() - interval '1 day')
       LIMIT 500`,
@@ -159,5 +163,6 @@ export async function cleanup(): Promise<{ expired: number; stale: number }> {
     await deleteObjects([row.storage_key, row.upload_key, ...variants.map((v) => v.storage_key)]).catch(() => {});
     await query(`DELETE FROM images WHERE id = $1`, [row.id]);
   }
+  await purgeUrls(expired.flatMap((r) => { const l = links(r); return [l.direct, l.thumb, l.medium]; }));
   return { expired: expired.length, stale: stale.length };
 }

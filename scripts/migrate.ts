@@ -1,16 +1,16 @@
-// Apply db/schema.sql (idempotent). Usage: npm run migrate
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
+// Create or upgrade the database tables. The app and worker also do this on startup,
+// so running it by hand (or as a pre-deploy command) is optional.
+// Usage: node dist/migrate.js
 import { pool } from "../lib/db";
+import { migrate } from "../lib/migrate";
 
-async function main() {
-  const sql = readFileSync(join(process.cwd(), "db", "schema.sql"), "utf8");
-  await pool.query(sql);
-  console.log("Schema is up to date.");
-  await pool.end();
-}
-
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+migrate(pool)
+  .then(async (r) => {
+    console.log(`Done: ${r.applied} applied, ${r.total} migrations in total.`);
+    await pool.end();
+  })
+  .catch(async (err) => {
+    console.error(err instanceof Error ? err.message : err);
+    await pool.end().catch(() => {});
+    process.exit(1);
+  });

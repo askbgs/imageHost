@@ -95,12 +95,15 @@ export async function changePassword(_prev: FormState, form: FormData): Promise<
   const current = String(form.get("current") || "");
   const next = String(form.get("password") || "");
 
-  const row = await queryOne<{ password_hash: string }>(`SELECT password_hash FROM users WHERE id = $1`, [user.id]);
-  if (!(await verifyPassword(current, row?.password_hash ?? null))) return { error: "Your current password is wrong." };
+  const row = await queryOne<{ password_hash: string | null }>(`SELECT password_hash FROM users WHERE id = $1`, [user.id]);
+  const hadPassword = !!row?.password_hash;
+  // Accounts created with GitHub, Google or Facebook have no password yet and can set one.
+  if (hadPassword && !(await verifyPassword(current, row!.password_hash))) return { error: "Your current password is wrong." };
   const problem = passwordProblem(next);
   if (problem) return { error: problem };
 
   await query(`UPDATE users SET password_hash = $2 WHERE id = $1`, [user.id, await hashPassword(next)]);
+  if (!hadPassword) return { ok: "Password set. You can now also sign in with your email and password." };
   // Sign out other devices, keep this one.
   await destroyAllSessions(user.id);
   await createSession(user.id);
@@ -120,4 +123,22 @@ export async function signOutEverywhere() {
   if (user) await destroyAllSessions(user.id);
   await destroySession();
   redirect("/login");
+}
+
+export async function disconnectProvider(form: FormData) {
+  const user = await currentUser();
+  if (!user) redirect("/login");
+  const provider = String(form.get("provider") || "");
+  const methods = await queryOne<{ has_password: boolean; providers: string }>(
+    `SELECT password_hash IS NOT NULL AS has_password,
+            (SELECT count(*) FROM oauth_accounts WHERE user_id = $1) AS providers
+       FROM users WHERE id = $1`,
+    [user.id],
+  );
+  // Never remove the last way to sign in.
+  if (!methods || (!methods.has_password && Number(methods.providers) <= 1)) {
+    redirect("/account/settings?error=last_method");
+  }
+  await query(`DELETE FROM oauth_accounts WHERE user_id = $1 AND provider = $2`, [user.id, provider]);
+  redirect(`/account/settings?disconnected=${encodeURIComponent(provider)}`);
 }

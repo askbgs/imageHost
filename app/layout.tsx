@@ -78,6 +78,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               </span>
               <Link href="/api-docs">API</Link>
               <Link href="/terms">Terms</Link>
+              <Link href="/privacy">Privacy</Link>
               <Link href="/abuse">Report abuse</Link>
             </div>
           </footer>

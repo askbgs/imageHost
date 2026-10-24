@@ -61,8 +61,8 @@ export function embedCodes(img: Pick<ImageRow, "id" | "slug" | "delete_token" | 
   };
 }
 
-/** Response body in ImgBB's shape (plus an `embed` object), so ImgBB clients work unchanged. */
-export function imgbbData(img: ImageRow, variants: VariantRow[], includeDelete = true) {
+/** Public JSON for an image: links, sizes, variants and embed codes. */
+export function imageData(img: ImageRow, variants: VariantRow[], includeDelete = true) {
   const l = links(img);
   const ext = img.slug.split(".").pop() ?? "";
   const stem = img.slug.replace(/\.[^.]+$/, "");

@@ -1,7 +1,7 @@
 import { ApiError, apiOk, handleError } from "@/lib/http";
 import { IMAGE_ID_RE, tokenMatches } from "@/lib/ids";
 import { failureToError, getImage, getVariants } from "@/lib/images";
-import { imgbbData } from "@/lib/links";
+import { imageData } from "@/lib/links";
 
 export const runtime = "nodejs";
 
@@ -14,7 +14,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
     if (!img || !tokenMatches(token, img.delete_token)) throw new ApiError("not_found", "Unknown upload");
     if (img.status === "failed") throw failureToError(img.fail_reason);
     const done = img.status === "active" || img.status === "flagged";
-    return apiOk(imgbbData(img, done ? await getVariants(id) : []), done ? 200 : 202);
+    return apiOk(imageData(img, done ? await getVariants(id) : []), done ? 200 : 202);
   } catch (err) {
     return handleError(err);
   }

@@ -2,7 +2,7 @@ import { authenticate, extractKey } from "@/lib/apikeys";
 import { ApiError, apiOk, handleError, preflight } from "@/lib/http";
 import { IMAGE_ID_RE, tokenMatches } from "@/lib/ids";
 import { getImage, getVariants, isLive, removeImage } from "@/lib/images";
-import { imgbbData } from "@/lib/links";
+import { imageData } from "@/lib/links";
 
 export const runtime = "nodejs";
 export const OPTIONS = preflight;
@@ -19,7 +19,7 @@ export async function GET(req: Request, ctx: Ctx) {
     const isOwner = img.user_id === key.user_id;
     if (!isOwner && !isLive(img)) throw new ApiError("not_found", "Image not found");
     const done = img.status === "active" || img.status === "flagged";
-    return apiOk(imgbbData(img, done ? await getVariants(id) : [], isOwner), done ? 200 : 202);
+    return apiOk(imageData(img, done ? await getVariants(id) : [], isOwner), done ? 200 : 202);
   } catch (err) {
     return handleError(err);
   }

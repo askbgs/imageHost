@@ -1,8 +1,10 @@
 import { config } from "./config";
 import { query, queryOne } from "./db";
 import { ApiError } from "./http";
-import { newDeleteToken, newImageId } from "./ids";
+import { newDeleteToken, newImageId, newUploadSuffix } from "./ids";
 import type { ImageRow, VariantRow } from "./links";
+import { purgeUrls } from "./cdn";
+import { links } from "./links";
 import { deleteObjects } from "./s3";
 import { safeStem } from "./filetype";
 
@@ -43,7 +45,8 @@ export async function createPendingImage(opts: {
           opts.name?.slice(0, 255) ?? null,
           opts.name ? opts.name.replace(/\.[A-Za-z0-9]{1,5}$/, "").slice(0, 120) : null,
           safeStem(opts.name),
-          `uploads/${id}`,
+          // Unguessable: with a public bucket, raw (unprocessed) uploads must not be reachable.
+          `uploads/${id}-${newUploadSuffix()}`,
           newDeleteToken(),
           opts.expirationSeconds,
           opts.uploaderIp,
@@ -80,6 +83,8 @@ export function isLive(img: ImageRow): boolean {
 export async function removeImage(img: ImageRow, opts: { keepRecord?: boolean; blockReason?: string } = {}) {
   const variants = await getVariants(img.id);
   await deleteObjects([img.storage_key, img.upload_key, ...variants.map((v) => v.storage_key)]);
+  const l = links(img);
+  await purgeUrls([l.direct, l.thumb, l.medium]);
   if (opts.blockReason && img.sha256) {
     await query(`INSERT INTO blocked_hashes (sha256, reason) VALUES ($1, $2) ON CONFLICT DO NOTHING`, [
       img.sha256,

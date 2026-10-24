@@ -1,6 +1,8 @@
 import {
   CreateBucketCommand,
+  DeleteObjectCommand,
   DeleteObjectsCommand,
+  PutBucketLifecycleConfigurationCommand,
   HeadBucketCommand,
   PutBucketCorsCommand,
   GetObjectCommand,
@@ -52,14 +54,27 @@ export async function presignPut(key: string, contentType: string, contentLength
   });
 }
 
-export async function putObject(key: string, body: Buffer, contentType: string) {
+/**
+ * Cache-Control stored on each object. With public delivery the CDN and browsers follow it,
+ * so images are only cached "forever" when deletions can purge the CDN; otherwise a day.
+ */
+export function objectCacheControl(expiresAt?: Date | null) {
+  if (expiresAt) {
+    const left = Math.max(60, Math.floor((new Date(expiresAt).getTime() - Date.now()) / 1000));
+    return `public, max-age=${Math.min(left, 86400)}`;
+  }
+  const canPurge = !!(config.cloudflare.zoneId && config.cloudflare.apiToken);
+  return canPurge || config.imageDelivery !== "public" ? "public, max-age=31536000, immutable" : "public, max-age=86400";
+}
+
+export async function putObject(key: string, body: Buffer, contentType: string, cacheControl = objectCacheControl()) {
   await s3.send(
     new PutObjectCommand({
       Bucket,
       Key: key,
       Body: body,
       ContentType: contentType,
-      CacheControl: "public, max-age=31536000, immutable",
+      CacheControl: cacheControl,
     }),
   );
 }
@@ -86,12 +101,17 @@ export async function getObjectStream(key: string) {
 export async function deleteObjects(keys: string[]) {
   const unique = [...new Set(keys.filter(Boolean))];
   if (unique.length === 0) return;
-  await s3.send(
-    new DeleteObjectsCommand({
-      Bucket,
-      Delete: { Objects: unique.map((Key) => ({ Key })), Quiet: true },
-    }),
-  );
+  try {
+    await s3.send(
+      new DeleteObjectsCommand({
+        Bucket,
+        Delete: { Objects: unique.map((Key) => ({ Key })), Quiet: true },
+      }),
+    );
+  } catch {
+    // Some S3-compatible services reject the batch call's checksum header; delete one by one.
+    await Promise.all(unique.map((Key) => s3.send(new DeleteObjectCommand({ Bucket, Key }))));
+  }
 }
 
 /** Short-lived signed GET URL, used when IMAGE_DELIVERY=redirect. */
@@ -109,12 +129,29 @@ export async function presignGet(key: string, opts: { contentType: string; expir
   return getSignedUrl(s3Public, cmd, { expiresIn: opts.expiresIn, signingDate });
 }
 
-/** Create the bucket if missing and allow browser PUTs from the site (for UPLOAD_MODE=direct). */
+export const CORS_RULES = (origin: string) => [
+  {
+    AllowedOrigins: [origin],
+    AllowedMethods: ["PUT", "GET", "HEAD"],
+    AllowedHeaders: ["content-type"],
+    ExposeHeaders: ["ETag"],
+    MaxAgeSeconds: 3600,
+  },
+];
+
+/**
+ * Create the bucket if missing, allow browser PUTs from the site (UPLOAD_MODE=direct), and
+ * expire raw uploads after a day. Each step reports its own result; a token without admin
+ * rights can still upload even if these settings must be made in the dashboard instead.
+ */
 export async function ensureBucket(siteOrigin: string) {
-  const result: { bucket: string; created: boolean; cors: "set" | "failed"; corsError?: string } = {
+  const result = {
     bucket: Bucket,
     created: false,
-    cors: "failed",
+    cors: "failed" as "set" | "failed",
+    corsError: "",
+    lifecycle: "failed" as "set" | "failed",
+    lifecycleError: "",
   };
   try {
     await s3.send(new HeadBucketCommand({ Bucket }));
@@ -123,24 +160,48 @@ export async function ensureBucket(siteOrigin: string) {
     result.created = true;
   }
   try {
+    await s3.send(new PutBucketCorsCommand({ Bucket, CORSConfiguration: { CORSRules: CORS_RULES(siteOrigin) } }));
+    result.cors = "set";
+  } catch (err) {
+    result.corsError = err instanceof Error ? err.message : String(err);
+  }
+  try {
     await s3.send(
-      new PutBucketCorsCommand({
+      new PutBucketLifecycleConfigurationCommand({
         Bucket,
-        CORSConfiguration: {
-          CORSRules: [
+        LifecycleConfiguration: {
+          Rules: [
             {
-              AllowedOrigins: [siteOrigin],
-              AllowedMethods: ["PUT", "GET", "HEAD"],
-              AllowedHeaders: ["content-type"],
-              MaxAgeSeconds: 3600,
+              ID: "expire-raw-uploads",
+              Status: "Enabled",
+              Filter: { Prefix: "uploads/" },
+              Expiration: { Days: 1 },
             },
           ],
         },
       }),
     );
-    result.cors = "set";
+    result.lifecycle = "set";
   } catch (err) {
-    result.corsError = err instanceof Error ? err.message : String(err);
+    result.lifecycleError = err instanceof Error ? err.message : String(err);
   }
   return result;
+}
+
+/** A client for another bucket, used when migrating existing images into this storage. */
+export function sourceClient(opts: {
+  endpoint?: string;
+  region: string;
+  accessKeyId: string;
+  secretAccessKey: string;
+  forcePathStyle: boolean;
+}) {
+  return new S3Client({
+    endpoint: opts.endpoint,
+    region: opts.region,
+    forcePathStyle: opts.forcePathStyle,
+    requestChecksumCalculation: "WHEN_REQUIRED",
+    responseChecksumValidation: "WHEN_REQUIRED",
+    credentials: { accessKeyId: opts.accessKeyId, secretAccessKey: opts.secretAccessKey },
+  });
 }

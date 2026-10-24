@@ -1,6 +1,6 @@
 # imghost
 
-Self-hosted image hosting: drag and drop anywhere on the page (or paste, pick files, or give a URL), and get a viewer page, a direct link, and HTML, BBCode and Markdown embeds. Includes an ImgBB-compatible upload API with keys and rate limits, and a moderation queue.
+Self-hosted image hosting: drag and drop anywhere on the page (or paste, pick files, or give a URL), and get a viewer page, a direct link, and HTML, BBCode and Markdown embeds. Includes an upload API with keys and rate limits, and a moderation queue.
 
 This covers Phases 1 to 2 of the spec and most of Phase 3: core upload, the public API, safety tooling, and user accounts with a personal image library and self-service API keys. Albums and paid plans are not built yet.
 
@@ -9,40 +9,39 @@ This covers Phases 1 to 2 of the spec and most of Phase 3: core upload, the publ
 | Area | Details |
 | --- | --- |
 | Web uploader | Full-window drop target, clipboard paste, file picker, URL import, expiry choice, 3 parallel uploads with progress, copy buttons for every format |
-| Upload pipeline | Browser uploads go straight to S3 storage with presigned URLs; a worker re-encodes each image with sharp (strips EXIF and GPS, applies orientation, neutralises hidden payloads) and makes a 180 px square thumbnail and a 640 px medium size |
+| Storage | Cloudflare R2. Images are served from your R2 custom domain through Cloudflare's CDN, with free egress; deletions purge the CDN cache when a Cloudflare token is set. See [R2.md](R2.md) |
+| Upload pipeline | Browser uploads go straight to R2 with signed URLs; a worker re-encodes each image with sharp (strips EXIF and GPS, applies orientation, neutralises hidden payloads) and makes a 180 px square thumbnail and a 640 px medium size |
 | Viewer page | `/{id}` with Open Graph tags for link previews, share codes, download, and a report form; flagged images are blurred |
 | API | `POST /1/upload` (file, base64 or URL), `GET /1/images`, `GET` and `DELETE /1/images/{id}`, `POST /1/reports`; docs at `/api-docs` |
 | Delete links | Every upload gets a secret delete link, so guests can remove their images |
 | Expiry | 5 minutes to 6 months; a worker job removes expired and abandoned uploads every 10 minutes |
 | Safety | Magic-byte type checks (SVG and HEIC rejected), 32 MB and 100-megapixel caps, SSRF protection for URL uploads, per-IP and per-key rate limits, exact-hash block list, optional NSFW scoring hook |
+| Social sign-in | GitHub, Google and Facebook, each enabled by setting its client ID and secret. See [SOCIAL_LOGIN.md](SOCIAL_LOGIN.md) |
 | Accounts | Sign up and sign in with email and password (scrypt hashes, server-side sessions in httpOnly cookies, lockout after repeated wrong passwords). Uploading from the website requires an account by default |
 | My images | Every upload is saved to the uploader's library: search, copy links, open, delete |
 | API keys | Users create and revoke their own keys (shown once, stored hashed). Images uploaded with a key land in the owner's library |
-| Settings | Change name and password (signs out other devices), sign out everywhere |
+| Settings | Change name and password (signs out other devices), connect or disconnect GitHub, Google and Facebook, sign out everywhere, delete the account and all its images |
 | Moderation | `/admin` for admin accounts: open reports, flagged images, recent uploads, users; remove, remove and block the file, dismiss, mark safe, suspend a user (which also revokes their keys and sessions) |
 
-Stack: Next.js 16, Postgres, Redis with BullMQ, S3-compatible storage (MinIO in Docker, or Cloudflare R2), sharp, Caddy for HTTPS.
+Stack: Next.js 16, Postgres, Redis with BullMQ, Cloudflare R2, sharp, Caddy for HTTPS. Any S3-compatible service (for example MinIO for local development) also works.
 
 ## Deploy on Railway
 
-See [RAILWAY.md](RAILWAY.md): web and worker services from this repo, plus Railway Postgres, Redis and a Bucket, set up in the dashboard in about 15 minutes.
+First set up the R2 bucket with [R2.md](R2.md), then follow [RAILWAY.md](RAILWAY.md): web and worker services from this repo, plus Railway Postgres and Redis, set up in the dashboard.
 
 ## Deploy on a VPS with Docker Compose
 
-You need a server with Docker, ports 80 and 443 open, and three DNS records pointing at it: `yoursite.com`, `i.yoursite.com` (images) and `s3.yoursite.com` (browser uploads to storage).
+Set up the R2 bucket and its image domain first ([R2.md](R2.md)). Then you need a server with Docker, ports 80 and 443 open, and a DNS record for `yoursite.com` pointing at it.
 
 ```bash
 cp .env.example .env
-# Edit .env: domains, POSTGRES_PASSWORD, S3 keys, ADMIN_EMAILS, ABUSE_EMAIL
+# Edit .env: SITE_URL, SITE_HOST, POSTGRES_PASSWORD, the R2_* values, ADMIN_EMAILS, ABUSE_EMAIL
 docker compose up -d --build
+docker compose exec app node dist/setup-bucket.js
 docker compose logs -f app worker
 ```
 
-Caddy gets HTTPS certificates automatically on first request. The database schema is applied when Postgres first starts. After an upgrade that changes `db/schema.sql`, run:
-
-```bash
-docker compose exec app node dist/migrate.js
-```
+Caddy gets HTTPS certificates automatically on first request. The app and worker create and upgrade the database tables themselves on startup (look for `[migrate]` in the logs). `docker compose exec app node dist/migrate.js` does the same by hand.
 
 ### Accounts and API keys
 
@@ -60,40 +59,37 @@ Arguments: email, a name for the key, uploads per hour. The key is printed once;
 curl -X POST "https://yoursite.com/1/upload?key=YOUR_KEY" -F "image=@photo.jpg"
 ```
 
-Tools that support ImgBB (ShareX, WordPress plugins, an n8n HTTP Request node) work by replacing `https://api.imgbb.com` with `https://yoursite.com` and using your key.
+Use it from ShareX (custom uploader), WordPress plugins that accept a custom upload endpoint, or an n8n HTTP Request node: send `POST https://yoursite.com/1/upload` with your key and an `image` field.
 
-### Use Cloudflare R2 instead of MinIO
+### Moving existing images to R2
 
-1. Create an R2 bucket and an API token with read and write access to it.
-2. Add a CORS rule on the bucket allowing `PUT` from your `SITE_URL` with the `Content-Type` header.
-3. In `.env`, use the R2 block from `.env.example` (endpoint `https://<ACCOUNT_ID>.r2.cloudflarestorage.com`, `S3_REGION=auto`, `S3_FORCE_PATH_STYLE=false`).
-4. Remove the `minio` and `minio-init` services from `docker-compose.yml` (and their `depends_on` entries), and the `{$S3_HOST}` block from `deploy/Caddyfile`.
-5. Add an R2 lifecycle rule deleting objects under `uploads/` after 1 day.
+If an earlier version stored images in MinIO, a Railway bucket or another S3 service, copy them with `node dist/migrate-storage.js` (see [R2.md](R2.md#moving-existing-images-to-r2)). Old links on your site forward to the R2 domain.
 
-### Put Cloudflare in front
+### Cloudflare in front of the site
 
-Proxy `i.yoursite.com` through Cloudflare to cache images at the edge; responses carry long-lived cache headers (shorter for images that expire). If all traffic reaches the server through Cloudflare, set `TRUST_CLOUDFLARE=true` so rate limits use the real client IP. Purge the cache for an image's URLs after removing it in `/admin`.
+If all traffic to `yoursite.com` also goes through Cloudflare's proxy, set `TRUST_CLOUDFLARE=true` so rate limits use the real client IP.
 
 ## Before you open public uploads
 
 Abuse handling is the biggest risk for a public image host. Do these first:
 
-1. **CSAM detection.** The built-in block list only matches exact files you've removed. Enable Cloudflare's CSAM Scanning Tool on the image domain, or apply for Microsoft PhotoDNA, and follow its reporting duties.
+1. **CSAM detection.** The built-in block list only matches exact files you've removed. Enable Cloudflare's CSAM Scanning Tool on the zone of your R2 image domain, or apply for Microsoft PhotoDNA, and follow its reporting duties.
 2. **NSFW scoring.** Set `MODERATION_WEBHOOK_URL` to an endpoint that takes image bytes and returns `{"nsfw": 0.0–1.0}`. Images at or above `MODERATION_THRESHOLD` are flagged: blurred on the viewer page and listed in `/admin`. An n8n workflow calling a classifier works well here.
 3. **Legal.** Review `/terms` and `/abuse` (templates in `app/terms` and `app/abuse`) with a lawyer, including Sri Lanka's Online Safety Act, and set a monitored `ABUSE_EMAIL`.
 4. **Watch the queue.** Check `/admin` daily.
 
 ## Local development
 
-Needs Node 20+, Postgres, Redis and an S3-compatible store (the simplest is `docker compose up -d postgres redis minio minio-init` with the ports published).
+Needs Node 20+, Postgres and Redis, plus either an R2 bucket for development or local MinIO (`docker compose --profile local-storage up -d minio`, then create the bucket with `node dist/setup-bucket.js`).
 
 ```bash
 npm install
 export DATABASE_URL=postgres://imghost:imghost@localhost:5432/imghost
 export REDIS_URL=redis://localhost:6379
-export S3_ENDPOINT=http://localhost:9000 S3_ACCESS_KEY_ID=... S3_SECRET_ACCESS_KEY=... S3_BUCKET=imghost
+# R2: export R2_ACCOUNT_ID=... R2_ACCESS_KEY_ID=... R2_SECRET_ACCESS_KEY=... R2_BUCKET=imghost-dev
+# or MinIO:
+export S3_ENDPOINT=http://localhost:9000 S3_ACCESS_KEY_ID=minio-admin S3_SECRET_ACCESS_KEY=change-me-at-least-8-chars S3_BUCKET=imghost
 export ADMIN_EMAILS=you@example.com TRUST_PROXY=false
-npm run migrate
 npm run dev          # web app on http://localhost:3000
 npm run worker:dev   # image processing worker, in a second terminal
 npx tsx scripts/create-api-key.ts you@example.com dev 1000
@@ -103,10 +99,11 @@ npx tsx scripts/create-api-key.ts you@example.com dev 1000
 
 | Variable | Values | Use |
 | --- | --- | --- |
-| `UPLOAD_MODE` | `direct` (default) | Browsers upload straight to storage with presigned URLs. Needs CORS on the bucket; `node dist/setup-bucket.js` tries to set it. |
-| | `server` | Browsers send the file to the app, which stores it. Works with any storage. |
-| `IMAGE_DELIVERY` | `proxy` (default) | `/i/...` streams image bytes through the app. Best with a CDN in front. |
-| | `redirect` | `/i/...` redirects to a signed storage URL (re-signed hourly, valid a day). Best where storage egress is free, such as Railway buckets. |
+| `UPLOAD_MODE` | `direct` (default) | Browsers upload straight to the bucket with signed URLs. Needs the CORS rule; `node dist/setup-bucket.js` sets it. |
+| | `server` | Browsers send the file to the app, which stores it. No CORS needed. |
+| `IMAGE_DELIVERY` | `public` (default with `R2_PUBLIC_URL`) | Links point at the R2 custom domain; Cloudflare serves and caches them. Old `/i/...` links forward there. |
+| | `redirect` (default with R2 and no public domain) | `/i/...` links redirect to signed R2 URLs (re-signed hourly, valid a day). |
+| | `proxy` | `/i/...` streams image bytes through the app. |
 | `CLIENT_IP_HEADER` | header name | Read the client IP from this one header, for example `x-real-ip` on Railway. |
 
 ## How an upload flows
@@ -127,6 +124,8 @@ app/                Next.js routes
   [id]/               viewer page and delete page
   i/[id]/[...path]/   serves image bytes (original, t/ thumb, m/ medium)
   login/, signup/     sign-in and sign-up pages
+  auth/[provider]/    GitHub, Google and Facebook sign-in and callbacks
+  privacy/            privacy page (also the data-deletion page Facebook asks for)
   account/            My images, API keys, settings
   actions/            server actions for auth and account changes
   admin/              moderation queue (admin accounts only)
@@ -135,15 +134,15 @@ app/                Next.js routes
 components/         Uploader, ShareCodes, ImageTile, KeyCreator, AccountMenu, Toast and forms
 lib/                config, db, s3, queue, rate limit, processing, moderation, links, auth, password
 worker/worker.ts    BullMQ worker: processing and cleanup
-scripts/            migrate, create-api-key, setup-bucket
-db/schema.sql       database schema (idempotent)
-deploy/Caddyfile    HTTPS reverse proxy for the three hostnames
+scripts/            migrate, create-api-key, setup-bucket, migrate-storage
+lib/migrations.ts   database schema as numbered migrations, applied on startup
+instrumentation.ts  runs the migrations when the web app starts
+deploy/Caddyfile    HTTPS reverse proxy for the site
 ```
 
 ## Not built yet
 
 - Email verification and password reset by email (needs an email provider; an admin can suspend accounts meanwhile)
-- Sign-in with Google or another identity provider
 - Albums and private images (the schema has the tables)
 - Client-side resize before upload, HEIC support
 - Paid plans, custom domains, viewer-page ads, usage analytics

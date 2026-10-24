@@ -1,6 +1,10 @@
-# imghost: web app, worker, Postgres, Redis, MinIO (S3) and Caddy (HTTPS).
-# 1) cp .env.example .env and fill it in   2) docker compose up -d --build
-# 3) docker compose exec app node dist/create-api-key.js you@example.com   (see README)
+# imghost: web app, worker, Postgres, Redis and Caddy (HTTPS). Images are stored in Cloudflare R2.
+# 1) cp .env.example .env and fill it in (see R2.md for the R2 values)
+# 2) docker compose up -d --build
+# 3) docker compose exec app node dist/setup-bucket.js
+#
+# Local development without R2: leave R2_ACCOUNT_ID empty, set the S3_* values for MinIO in .env,
+# and add --profile local-storage to start MinIO as well.
 
 services:
   app:
@@ -14,7 +18,6 @@ services:
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
-      minio-init: { condition: service_completed_successfully }
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://localhost:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 30s
@@ -32,7 +35,6 @@ services:
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
-      minio-init: { condition: service_completed_successfully }
 
   postgres:
     image: postgres:16-alpine
@@ -43,7 +45,6 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - pgdata:/var/lib/postgresql/data
-      - ./db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U imghost -d imghost"]
       interval: 5s
@@ -62,37 +63,6 @@ services:
       timeout: 3s
       retries: 10
 
-  # Local S3. To use Cloudflare R2 instead, point the S3_* variables in .env at R2
-  # and remove minio, minio-init and the s3 block in the Caddyfile.
-  minio:
-    image: minio/minio:latest
-    restart: unless-stopped
-    command: ["server", "/data", "--console-address", ":9001"]
-    environment:
-      MINIO_ROOT_USER: ${S3_ACCESS_KEY_ID}
-      MINIO_ROOT_PASSWORD: ${S3_SECRET_ACCESS_KEY}
-      MINIO_API_CORS_ALLOW_ORIGIN: ${SITE_URL}
-    volumes:
-      - miniodata:/data
-    healthcheck:
-      test: ["CMD", "mc", "ready", "local"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-
-  minio-init:
-    image: minio/mc:latest
-    depends_on:
-      minio: { condition: service_healthy }
-    # Creates the bucket; raw uploads that never got processed are expired after a day.
-    entrypoint: >
-      /bin/sh -c "
-      set -e;
-      mc alias set local http://minio:9000 $${S3_ACCESS_KEY_ID} $${S3_SECRET_ACCESS_KEY};
-      mc mb --ignore-existing local/$${S3_BUCKET};
-      mc ilm rule add --expire-days 1 --prefix uploads/ local/$${S3_BUCKET} || echo 'lifecycle rule not added';"
-    env_file: .env
-
   caddy:
     image: caddy:2-alpine
     restart: unless-stopped
@@ -105,10 +75,30 @@ services:
       - caddydata:/data
     depends_on:
       - app
-      - minio
+
+  # Local development only (docker compose --profile local-storage up -d).
+  minio:
+    profiles: ["local-storage"]
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: ["server", "/data", "--console-address", ":9001"]
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY_ID:-minio-admin}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_ACCESS_KEY:-change-me-at-least-8-chars}
+      MINIO_API_CORS_ALLOW_ORIGIN: ${SITE_URL}
+    volumes:
+      - miniodata:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
 volumes:
   pgdata:
   redisdata:
-  miniodata:
   caddydata:
+  miniodata:

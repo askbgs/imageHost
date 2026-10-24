@@ -11,7 +11,7 @@ export const maxDuration = 90;
 export const OPTIONS = preflight;
 
 /**
- * POST /1/upload — ImgBB-compatible.
+ * POST /1/upload
  *   key         API key (also ?key=, X-API-Key header, or Bearer token)
  *   image       binary file, base64 string (optionally a data: URL), or http(s) URL
  *   name        optional file name

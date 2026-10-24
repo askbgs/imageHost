@@ -1,7 +1,7 @@
 import { authenticate, extractKey } from "@/lib/apikeys";
 import { query } from "@/lib/db";
 import { apiOk, handleError, preflight } from "@/lib/http";
-import { imgbbData, type ImageRow, type VariantRow } from "@/lib/links";
+import { imageData, type ImageRow, type VariantRow } from "@/lib/links";
 
 export const runtime = "nodejs";
 export const OPTIONS = preflight;
@@ -30,7 +30,7 @@ export async function GET(req: Request) {
       page,
       per_page: perPage,
       total,
-      images: rows.map((r) => imgbbData(r, variants.filter((v) => v.image_id === r.id))),
+      images: rows.map((r) => imageData(r, variants.filter((v) => v.image_id === r.id))),
     });
   } catch (err) {
     return handleError(err);

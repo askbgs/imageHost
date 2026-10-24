@@ -16,7 +16,7 @@ export function SignInForm({ next, allowSignup }: { next: string; allowSignup: b
       )}
       <div className="field">
         <label htmlFor="email">Email</label>
-        <input id="email" name="email" type="email" autoComplete="email" required defaultValue={state.fields?.email} autoFocus />
+        <input id="email" name="email" type="email" autoComplete="email" required defaultValue={state.fields?.email} />
       </div>
       <div className="field">
         <label htmlFor="password">Password</label>
@@ -46,7 +46,7 @@ export function SignUpForm({ next }: { next: string }) {
       )}
       <div className="field">
         <label htmlFor="name">Name</label>
-        <input id="name" name="name" type="text" autoComplete="name" defaultValue={state.fields?.name} maxLength={60} autoFocus />
+        <input id="name" name="name" type="text" autoComplete="name" defaultValue={state.fields?.name} maxLength={60} />
         <span className="field-hint">Optional. Shown only to you.</span>
       </div>
       <div className="field">

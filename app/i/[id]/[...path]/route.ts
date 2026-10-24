@@ -20,6 +20,14 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string; pat
   const img = await getImage(id);
   if (!img || !isLive(img)) return notFound();
 
+  if (config.imageDelivery === "public") {
+    // Links made before switching to the bucket's public domain keep working.
+    return new Response(null, {
+      status: 301,
+      headers: { Location: `${config.imageBaseUrl}/${id}/${path.join("/")}`, "Cache-Control": "public, max-age=86400" },
+    });
+  }
+
   let key = img.storage_key;
   let mime = img.mime_type ?? "application/octet-stream";
   if (path.length === 2) {

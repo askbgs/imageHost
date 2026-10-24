@@ -11,9 +11,9 @@ export default function ApiDocs() {
         <a href="/account/keys">Get an API key</a> from your account, then send images from any app.
       </p>
       <p>
-        One endpoint uploads an image from a file, a base64 string or a public URL. The request and response follow
-        ImgBB&apos;s format, so tools built for ImgBB (ShareX, WordPress plugins, n8n HTTP nodes) work after you change
-        the endpoint and key.
+        One endpoint uploads an image from a file, a base64 string or a public URL, and returns its links and embed
+        codes as JSON. It works with ShareX custom uploaders, n8n HTTP Request nodes, and any tool that can send a
+        form upload.
       </p>
 
       <h2>Upload an image</h2>

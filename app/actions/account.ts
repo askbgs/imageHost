@@ -1,12 +1,15 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 import { createKey } from "@/lib/apikeys";
-import { currentUser } from "@/lib/auth";
+import { SESSION_COOKIE, currentUser } from "@/lib/auth";
 import { config } from "@/lib/config";
 import { query, queryOne } from "@/lib/db";
 import { IMAGE_ID_RE } from "@/lib/ids";
 import { getImage, removeImage } from "@/lib/images";
+import type { ImageRow } from "@/lib/links";
 
 export type KeyState = { error?: string; key?: string; name?: string };
 
@@ -45,4 +48,28 @@ export async function revokeApiKey(form: FormData) {
   const id = String(form.get("id") || "");
   await query(`UPDATE api_keys SET revoked_at = now() WHERE id = $1 AND user_id = $2 AND revoked_at IS NULL`, [id, user.id]);
   revalidatePath("/account/keys");
+}
+
+export type DeleteState = { error?: string };
+
+/** Permanently delete the signed-in account, its images (from storage too), keys and sessions. */
+export async function deleteAccount(_prev: DeleteState, form: FormData): Promise<DeleteState> {
+  const user = await currentUser();
+  if (!user) return { error: "Sign in again to delete your account." };
+  const typed = String(form.get("confirm") || "").trim().toLowerCase();
+  if (typed !== user.email.toLowerCase()) return { error: "Type your email address exactly to confirm." };
+  if (user.role === "admin") {
+    const admins = await queryOne<{ n: string }>(`SELECT count(*) AS n FROM users WHERE role = 'admin' AND status = 'active'`);
+    if (Number(admins?.n ?? 0) <= 1) return { error: "You're the only admin. Make someone else an admin first." };
+  }
+
+  const images = await query<ImageRow>(`SELECT * FROM images WHERE user_id = $1 AND status <> 'removed'`, [user.id]);
+  for (const img of images) {
+    await removeImage(img).catch((err) => console.error(`[delete-account] image ${img.id}:`, err));
+  }
+  // Moderation history keeps removed images, detached from the person.
+  await query(`UPDATE images SET user_id = NULL, uploader_ip = NULL WHERE user_id = $1`, [user.id]);
+  await query(`DELETE FROM users WHERE id = $1`, [user.id]); // sessions, keys, albums and connections cascade
+  (await cookies()).delete(SESSION_COOKIE);
+  redirect("/?deleted=1");
 }
