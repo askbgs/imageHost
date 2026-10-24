@@ -1,4 +1,4 @@
-# imghost: web app, worker, Postgres, Redis and Caddy (HTTPS). Images are stored in Cloudflare R2.
+# PinPix: web app, worker, Postgres, Redis and Caddy (HTTPS). Images are stored in Cloudflare R2.
 # 1) cp .env.example .env and fill it in (see R2.md for the R2 values)
 # 2) docker compose up -d --build
 # 3) docker compose exec app node dist/setup-bucket.js
@@ -12,7 +12,7 @@ services:
     restart: unless-stopped
     env_file: .env
     environment:
-      DATABASE_URL: postgres://imghost:${POSTGRES_PASSWORD}@postgres:5432/imghost
+      DATABASE_URL: postgres://pinpix:${POSTGRES_PASSWORD}@postgres:5432/pinpix
       REDIS_URL: redis://redis:6379
       TRUST_PROXY: "true"
     depends_on:
@@ -30,7 +30,7 @@ services:
     command: ["node", "dist/worker.js"]
     env_file: .env
     environment:
-      DATABASE_URL: postgres://imghost:${POSTGRES_PASSWORD}@postgres:5432/imghost
+      DATABASE_URL: postgres://pinpix:${POSTGRES_PASSWORD}@postgres:5432/pinpix
       REDIS_URL: redis://redis:6379
     depends_on:
       postgres: { condition: service_healthy }
@@ -40,13 +40,13 @@ services:
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_DB: imghost
-      POSTGRES_USER: imghost
+      POSTGRES_DB: pinpix
+      POSTGRES_USER: pinpix
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U imghost -d imghost"]
+      test: ["CMD-SHELL", "pg_isready -U pinpix -d pinpix"]
       interval: 5s
       timeout: 5s
       retries: 10

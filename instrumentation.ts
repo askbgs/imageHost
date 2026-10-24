@@ -10,6 +10,10 @@ export async function register() {
     try {
       await migrate(pool);
       await checkStorage();
+      if (process.env.RUN_WORKER === "true") {
+        const { startWorker } = await import("./lib/worker-runtime");
+        await startWorker("web-worker");
+      }
       return;
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);

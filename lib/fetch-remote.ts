@@ -66,7 +66,7 @@ export async function fetchRemoteImage(rawUrl: string, maxBytes: number): Promis
       res = await fetch(url, {
         redirect: "manual",
         signal: ctrl.signal,
-        headers: { "User-Agent": "imghost-fetch/1.0", Accept: "image/*" },
+        headers: { "User-Agent": "PinPix-fetch/1.0", Accept: "image/*" },
       });
     } catch {
       clearTimeout(timer);

@@ -46,7 +46,7 @@ const storage = r2Account
       // Endpoint browsers use for presigned PUTs. Defaults to endpoint.
       publicEndpoint: process.env.S3_PUBLIC_ENDPOINT || process.env.S3_ENDPOINT || undefined,
       region: env("S3_REGION", "auto"),
-      bucket: env("S3_BUCKET", "imghost"),
+      bucket: env("S3_BUCKET", "pinpix"),
       accessKeyId: env("S3_ACCESS_KEY_ID", "minioadmin"),
       secretAccessKey: env("S3_SECRET_ACCESS_KEY", "minioadmin"),
       forcePathStyle: env("S3_FORCE_PATH_STYLE", "true") === "true",
@@ -72,7 +72,7 @@ if (imageDelivery === "public" && !r2PublicUrl && !process.env.IMAGE_BASE_URL) {
 }
 
 export const config = {
-  siteName: env("SITE_NAME", "imghost"),
+  siteName: env("SITE_NAME", "PinPix"),
   siteUrl,
   // Where direct image links point. With public delivery this is the bucket's domain;
   // otherwise this app's /i route (or a host you map to it).
@@ -81,7 +81,7 @@ export const config = {
     : env("IMAGE_BASE_URL", `${siteUrl}/i`)
   ).replace(/\/$/, ""),
 
-  databaseUrl: env("DATABASE_URL", "postgres://imghost:imghost@localhost:5432/imghost"),
+  databaseUrl: env("DATABASE_URL", "postgres://pinpix:pinpix@localhost:5432/pinpix"),
   redisUrl: env("REDIS_URL", "redis://localhost:6379"),
 
   s3: storage,

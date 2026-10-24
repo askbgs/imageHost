@@ -82,7 +82,7 @@ const PROVIDERS: Record<ProviderId, Provider> = {
       return (await json<{ access_token: string }>(res, "GitHub token")).access_token;
     },
     async profile(token) {
-      const headers = { Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json", "User-Agent": "imghost" };
+      const headers = { Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json", "User-Agent": "PinPix" };
       const user = await json<{ id: number; login: string; name: string | null }>(
         await fetch("https://api.github.com/user", { headers, signal: timeout() }),
         "GitHub profile",

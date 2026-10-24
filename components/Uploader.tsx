@@ -115,7 +115,7 @@ async function pollUntilDone(id: string, token: string): Promise<UploadData> {
     const body = await readJson(await fetch(`/api/internal/uploads/${id}?token=${encodeURIComponent(token)}`));
     if (body.status === 200) return body.data;
   }
-  throw new Error("Processing is taking longer than expected. Check the viewer link in a minute.");
+  throw new Error("Processing is taking too long. Try again; if it keeps happening, the site's image worker may be down.");
 }
 
 export function Uploader({ maxBytes, mode }: { maxBytes: number; mode: "direct" | "server" }) {

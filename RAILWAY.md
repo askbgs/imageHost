@@ -20,7 +20,7 @@ If you use different names, change the names inside `${{...}}` below to match.
 Open **web → Variables → Raw Editor** and paste this, then set your own `ADMIN_EMAILS` and `ABUSE_EMAIL`:
 
 ```
-SITE_NAME=imghost
+SITE_NAME=PinPix
 SITE_URL=https://${{RAILWAY_PUBLIC_DOMAIN}}
 ABUSE_EMAIL=abuse@yoursite.com
 ADMIN_EMAILS=you@yoursite.com
@@ -113,6 +113,17 @@ To issue a key from the command line instead, install the [Railway CLI](https://
 ```bash
 railway ssh --service web -- node dist/create-api-key.js you@example.com "n8n automations" 500
 ```
+
+## If uploads stay on "Processing"
+
+Images are processed (location data removed, thumbnails made) by the **worker** service. The app now processes them itself when no worker picks them up within a few seconds, so uploads finish either way. Open `/api/health` and check `image_workers`:
+
+- **1 connected** (or more): the worker is running. Nothing to do.
+- **none connected:** the web app is doing the processing. Either fix the worker, or run it inside the web service (below).
+
+Common reasons the worker isn't running: the service was never created, its start command isn't `node dist/worker.js`, it's missing the `R2_*` variables (its deploy log then shows `Missing required environment variable`), or its `REDIS_URL` points at a different Redis than the web service's.
+
+**Simpler setup: one service.** Set `RUN_WORKER=true` on the web service and delete the worker service. The web app then processes images in the background itself. This suits small and medium sites; split them again if uploads get heavy, so image processing doesn't slow page loads. Give the web service at least 1 GB of memory either way.
 
 ## If tables are missing
 

@@ -1,6 +1,7 @@
 import { config } from "@/lib/config";
 import { pool } from "@/lib/db";
 import { schemaStatus } from "@/lib/migrate";
+import { workerCount } from "@/lib/queue";
 import { redis } from "@/lib/redis";
 import { storageStatus } from "@/lib/s3";
 
@@ -24,6 +25,15 @@ export async function GET() {
     result.redis = "ok";
   } catch {
     result.redis = "unreachable";
+  }
+  if (result.redis === "ok") {
+    const n = await workerCount();
+    result.image_workers =
+      n === null
+        ? "unknown (Redis doesn't list clients)"
+        : n > 0
+          ? `${n} connected`
+          : "none connected: the web app is processing images itself. Start the worker service (node dist/worker.js) or set RUN_WORKER=true";
   }
   const st = await storageStatus(origin).catch(() => ({ bucket: "unreachable", cors: "unknown" as const, corsOrigins: [] }));
   result.storage = st.bucket;

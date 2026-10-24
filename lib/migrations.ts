@@ -1,7 +1,7 @@
 // Database migrations, embedded in code so they run wherever the app runs (no SQL files
 // to copy). They are applied automatically when the web app or worker starts, and by
 // `node dist/migrate.js`. Each one runs once, in order, inside a transaction; all of them
-// are also written to be safe on databases created by earlier versions of imghost.
+// are also written to be safe on databases created by earlier versions of the app.
 //
 // To change the schema, append a new migration. Never edit one that has shipped.
 

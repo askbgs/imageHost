@@ -23,7 +23,8 @@ function Svg({ size = 18, className, children }: P & { children: React.ReactNode
 export const LogoMark = ({ size = 22 }: P) => (
   <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
     <path d="M3 8V3h5M16 3h5v5M21 16v5h-5M8 21H3v-5" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="square" />
-    <circle cx="12" cy="12" r="3.2" fill="var(--accent)" />
+    <path d="M12 6.6a3.9 3.9 0 0 1 3.9 3.9c0 2.9-3.9 6.9-3.9 6.9s-3.9-4-3.9-6.9A3.9 3.9 0 0 1 12 6.6z" fill="var(--accent)" />
+    <circle cx="12" cy="10.5" r="1.45" fill="var(--sheet)" />
   </svg>
 );
 
