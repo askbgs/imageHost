@@ -87,7 +87,7 @@ export default async function ViewerPage({ params }: Props) {
             <a className="btn secondary small" href={l.direct} download={img.slug}>
               Download
             </a>
-            {isOwner && <OwnerDelete id={img.id} />}
+            {isOwner && <OwnerDelete id={img.id} title={title} thumb={l.thumb} />}
           </div>
         </div>
         <div style={{ display: "grid", gap: 20 }}>

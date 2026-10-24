@@ -1,15 +1,17 @@
 import Link from "next/link";
-import { ImageTile, type TileData } from "@/components/ImageTile";
+import { ImageGallery } from "@/components/ImageGallery";
+import type { GalleryImage } from "@/components/Lightbox";
 import { IconUpload } from "@/components/Icons";
 import { requireUser } from "@/lib/auth";
 import { query } from "@/lib/db";
-import { links, type ImageRow } from "@/lib/links";
+import { embedCodes, links, type ImageRow } from "@/lib/links";
 
 export const metadata = { title: "My images" };
 
 const PER_PAGE = 48;
 
 function formatBytes(n: number) {
+  if (n < 1024) return `${n} B`;
   if (n < 1024 * 1024) return `${Math.max(1, Math.round(n / 1024))} KB`;
   return `${(n / 1024 / 1024).toFixed(1)} MB`;
 }
@@ -40,18 +42,33 @@ export default async function MyImages({ searchParams }: Props) {
   const total = Number(rows[0]?.total ?? 0);
   const pages = Math.max(1, Math.ceil(total / PER_PAGE));
 
-  const tiles: TileData[] = rows.map((r, i) => {
+  const tiles: GalleryImage[] = rows.map((r, i) => {
     const l = links(r);
+    const c = embedCodes(r);
     return {
       id: r.id,
       title: r.title || r.slug,
+      slug: r.slug,
       thumb: l.thumb,
+      medium: l.medium,
       direct: l.direct,
       viewer: l.viewer,
-      meta: `${r.width} × ${r.height} · ${formatBytes(Number(r.size_bytes ?? 0))} · ${new Date(r.created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}`,
+      width: r.width ?? 0,
+      height: r.height ?? 0,
+      size: formatBytes(Number(r.size_bytes ?? 0)),
+      uploaded: new Date(r.created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }),
       flagged: r.status === "flagged",
       expires: r.expires_at ? timeLeft(r.expires_at) : null,
       frame: String(total - ((page - 1) * PER_PAGE + i)).padStart(2, "0"),
+      codes: {
+        viewer: c.viewer,
+        direct: c.direct,
+        html_full: c.html_full,
+        html_thumb: c.html_thumb,
+        bbcode_full: c.bbcode_full,
+        bbcode_thumb: c.bbcode_thumb,
+        markdown: c.markdown,
+      },
     };
   });
 
@@ -103,11 +120,7 @@ export default async function MyImages({ searchParams }: Props) {
           )}
         </div>
       ) : (
-        <div className="grid">
-          {tiles.map((t) => (
-            <ImageTile key={t.id} img={t} />
-          ))}
-        </div>
+        <ImageGallery initial={tiles} />
       )}
 
       {pages > 1 && (

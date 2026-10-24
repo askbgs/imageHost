@@ -10,7 +10,7 @@ Every provider needs a callback (redirect) URL. Use your real `SITE_URL`, exactl
 | Google | `https://yoursite.com/auth/google/callback` |
 | Facebook | `https://yoursite.com/auth/facebook/callback` |
 
-On Railway before you add a custom domain, use the Railway domain, for example `https://pinpix-production.up.railway.app/auth/github/callback`. When you switch domains, update the URL at each provider as well as `SITE_URL`.
+On Railway before you add a custom domain, use the Railway domain, for example `https://pinpicx-production.up.railway.app/auth/github/callback`. When you switch domains, update the URL at each provider as well as `SITE_URL`.
 
 ## GitHub
 

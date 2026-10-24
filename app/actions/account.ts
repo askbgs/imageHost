@@ -24,6 +24,30 @@ export async function deleteMyImage(id: string): Promise<{ ok: boolean; error?: 
   return { ok: true };
 }
 
+/** Delete several of the signed-in user's images at once (up to 100). */
+export async function deleteMyImages(ids: string[]): Promise<{ deleted: string[]; error?: string }> {
+  const user = await currentUser();
+  if (!user) return { deleted: [], error: "Sign in again to delete images." };
+  const wanted = [...new Set(ids)].filter((id) => IMAGE_ID_RE.test(id)).slice(0, 100);
+  if (wanted.length === 0) return { deleted: [] };
+  // Only the caller's own images; anything else in the list is ignored.
+  const rows = await query<ImageRow>(
+    `SELECT * FROM images WHERE id = ANY($1) AND user_id = $2 AND status <> 'removed'`,
+    [wanted, user.id],
+  );
+  const deleted: string[] = [];
+  for (const img of rows) {
+    try {
+      await removeImage(img);
+      deleted.push(img.id);
+    } catch (err) {
+      console.error(`[delete] ${img.id}:`, err);
+    }
+  }
+  revalidatePath("/account");
+  return deleted.length < rows.length ? { deleted, error: "Some images couldn't be deleted. Try again." } : { deleted };
+}
+
 export async function createApiKey(_prev: KeyState, form: FormData): Promise<KeyState> {
   const user = await currentUser();
   if (!user) return { error: "Sign in again to create keys." };

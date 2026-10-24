@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import Link from "next/link";
 import { AccountMenu } from "@/components/AccountMenu";
+import { ConfirmProvider } from "@/components/ConfirmDialog";
 import { LogoMark } from "@/components/Icons";
 import { NavLinks } from "@/components/NavLinks";
 import { ToastProvider } from "@/components/Toast";
@@ -40,6 +41,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       </head>
       <body>
         <ToastProvider>
+          <ConfirmProvider>
           <a href="#main" className="skip">
             Skip to content
           </a>
@@ -82,6 +84,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               <Link href="/abuse">Report abuse</Link>
             </div>
           </footer>
+          </ConfirmProvider>
         </ToastProvider>
       </body>
     </html>

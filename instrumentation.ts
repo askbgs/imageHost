@@ -16,8 +16,14 @@ export async function register() {
       }
       return;
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      const connection = /ECONNREFUSED|ENOTFOUND|EAI_AGAIN|ETIMEDOUT|terminating|starting up|Connection terminated/i.test(msg);
+      const msg = err instanceof Error ? err.message || err.name : String(err);
+      // Connection errors can arrive as an AggregateError with an empty message (one per
+      // address tried), so look at the error codes too.
+      const e = err as { code?: string; errors?: { code?: string }[] };
+      const codes = [e.code, ...(e.errors ?? []).map((x) => x.code)].filter(Boolean) as string[];
+      const connection =
+        codes.some((c) => ["ECONNREFUSED", "ENOTFOUND", "EAI_AGAIN", "ETIMEDOUT", "ECONNRESET", "57P03"].includes(c)) ||
+        /ECONNREFUSED|ENOTFOUND|EAI_AGAIN|ETIMEDOUT|terminating|starting up|Connection terminated/i.test(msg);
       if (!connection || attempt >= 12) {
         console.error(`[migrate] could not prepare the database: ${msg}`);
         throw err;

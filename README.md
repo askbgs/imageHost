@@ -1,4 +1,4 @@
-# PinPix
+# PinPicX
 
 Self-hosted image hosting: drag and drop anywhere on the page (or paste, pick files, or give a URL), and get a viewer page, a direct link, and HTML, BBCode and Markdown embeds. Includes an upload API with keys and rate limits, and a moderation queue.
 
@@ -84,11 +84,11 @@ Needs Node 20+, Postgres and Redis, plus either an R2 bucket for development or 
 
 ```bash
 npm install
-export DATABASE_URL=postgres://pinpix:pinpix@localhost:5432/pinpix
+export DATABASE_URL=postgres://pinpicx:pinpicx@localhost:5432/pinpicx
 export REDIS_URL=redis://localhost:6379
-# R2: export R2_ACCOUNT_ID=... R2_ACCESS_KEY_ID=... R2_SECRET_ACCESS_KEY=... R2_BUCKET=pinpix-dev
+# R2: export R2_ACCOUNT_ID=... R2_ACCESS_KEY_ID=... R2_SECRET_ACCESS_KEY=... R2_BUCKET=pinpicx-dev
 # or MinIO:
-export S3_ENDPOINT=http://localhost:9000 S3_ACCESS_KEY_ID=minio-admin S3_SECRET_ACCESS_KEY=change-me-at-least-8-chars S3_BUCKET=pinpix
+export S3_ENDPOINT=http://localhost:9000 S3_ACCESS_KEY_ID=minio-admin S3_SECRET_ACCESS_KEY=change-me-at-least-8-chars S3_BUCKET=pinpicx
 export ADMIN_EMAILS=you@example.com TRUST_PROXY=false
 npm run dev          # web app on http://localhost:3000
 npm run worker:dev   # image processing worker, in a second terminal

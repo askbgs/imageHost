@@ -20,7 +20,7 @@ If you use different names, change the names inside `${{...}}` below to match.
 Open **web → Variables → Raw Editor** and paste this, then set your own `ADMIN_EMAILS` and `ABUSE_EMAIL`:
 
 ```
-SITE_NAME=PinPix
+SITE_NAME=PinPicX
 SITE_URL=https://${{RAILWAY_PUBLIC_DOMAIN}}
 ABUSE_EMAIL=abuse@yoursite.com
 ADMIN_EMAILS=you@yoursite.com
