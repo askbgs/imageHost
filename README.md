@@ -15,7 +15,7 @@ This covers Phases 1 to 2 of the spec and most of Phase 3: core upload, the publ
 | API | `POST /v1/upload` (file, base64 or URL), `GET /v1/images`, `GET` and `DELETE /v1/images/{id}`, `POST /v1/reports`; docs at `/api-docs` |
 | Delete links | Every upload gets a secret delete link, so guests can remove their images |
 | Expiry | 5 minutes to 6 months; a worker job removes expired and abandoned uploads every 10 minutes |
-| Safety | Magic-byte type checks (SVG and HEIC rejected), 32 MB and 100-megapixel caps, SSRF protection for URL uploads, per-IP and per-key rate limits, exact-hash block list, optional NSFW scoring hook |
+| Safety | Magic-byte type checks (SVG and HEIC rejected), 32 MB and 100-megapixel caps, SSRF protection for URL uploads, per-IP and per-key rate limits, block list for removed images and their look-alikes, automatic screening of every upload for adult content, graphic violence and self-harm (OpenAI moderation, free), pausing of repeat offenders. See [MODERATION.md](MODERATION.md) |
 | Social sign-in | GitHub, Google and Facebook, each enabled by setting its client ID and secret. See [SOCIAL_LOGIN.md](SOCIAL_LOGIN.md) |
 | Albums | Group images into albums and share each with one link (/a/{id}). Public (also listed on /u/{username}), unlisted, or private on Pro and Business. Upload straight into an album from the website or with the API `album` field |
 | Plans and payments | Free, Pro and Business plans with their own storage (1 GB / 50 GB / 500 GB by default), API and upload limits. Monthly or yearly subscriptions through Paddle: checkout, upgrades, cancellation and invoices. See [PADDLE.md](PADDLE.md) |
@@ -76,7 +76,7 @@ If all traffic to `yoursite.com` also goes through Cloudflare's proxy, set `TRUS
 Abuse handling is the biggest risk for a public image host. Do these first:
 
 1. **CSAM detection.** The built-in block list only matches exact files you've removed. Enable Cloudflare's CSAM Scanning Tool on the zone of your R2 image domain, or apply for Microsoft PhotoDNA, and follow its reporting duties.
-2. **NSFW scoring.** Set `MODERATION_WEBHOOK_URL` to an endpoint that takes image bytes and returns `{"nsfw": 0.0–1.0}`. Images at or above `MODERATION_THRESHOLD` are flagged: blurred on the viewer page and listed in `/admin`. An n8n workflow calling a classifier works well here.
+2. **Automatic screening.** Set `OPENAI_API_KEY` and every upload is screened before it goes live: adult images and graphic violence are marked sensitive (or blocked, if you choose), self-harm is marked sensitive, and accounts with repeated blocked uploads are paused for review. Also turn on Cloudflare's CSAM Scanning Tool for the image domain. Details in [MODERATION.md](MODERATION.md).
 3. **Legal.** Review `/terms` and `/abuse` (templates in `app/terms` and `app/abuse`) with a lawyer, including Sri Lanka's Online Safety Act, and set a monitored `ABUSE_EMAIL`.
 4. **Watch the queue.** Check `/admin` daily.
 

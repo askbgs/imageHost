@@ -102,15 +102,19 @@ export default async function Home({
     );
   }
 
-  const [usage, albums] = user
+  const [usage, albums, paused] = user
     ? await Promise.all([
         storageUsage(user.id).catch(() => null),
         query<{ id: string; title: string }>(
           `SELECT id, title FROM albums WHERE user_id = $1 ORDER BY updated_at DESC`,
           [user.id],
         ),
+        query<{ p: boolean }>(
+          `SELECT uploads_paused_at IS NOT NULL AS p FROM users WHERE id = $1`,
+          [user.id],
+        ).then((r) => r[0]?.p ?? false),
       ])
-    : [null, []];
+    : [null, [], false];
 
   return (
     <>
@@ -131,6 +135,14 @@ export default async function Home({
           )}
         </p>
       </section>
+      {paused && (
+        <div className="alert error storage-notice" role="alert">
+          <strong>Uploads from your account are paused</strong> while we review
+          images that our automatic safety check blocked. Your existing images
+          and links keep working. If you think this is a mistake, email{" "}
+          <a href={`mailto:${config.contactEmail}`}>{config.contactEmail}</a>.
+        </div>
+      )}
       {usage && <StorageNotice usage={usage} />}
       <Uploader
         maxBytes={config.maxUploadBytes}

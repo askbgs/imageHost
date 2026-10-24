@@ -254,4 +254,23 @@ DO $$ BEGIN
 END $$;
 `,
   },
+  {
+    id: 8,
+    name: "automatic screening",
+    sql: `
+-- What automatic screening found for each image: labels like {adult} and the provider's scores.
+ALTER TABLE images ADD COLUMN IF NOT EXISTS moderation_labels TEXT[];
+ALTER TABLE images ADD COLUMN IF NOT EXISTS moderation_scores JSONB;
+-- 64-bit perceptual hash (dHash): near-identical images (resized, re-saved) have hashes a few bits apart.
+ALTER TABLE images ADD COLUMN IF NOT EXISTS phash BIGINT;
+CREATE INDEX IF NOT EXISTS idx_images_blocked ON images (created_at DESC) WHERE fail_reason LIKE 'blocked%';
+
+-- Blocking a removed image now also blocks look-alikes, by perceptual hash.
+ALTER TABLE blocked_hashes ADD COLUMN IF NOT EXISTS phash BIGINT;
+
+-- Accounts whose uploads were paused after repeated blocked uploads, until an admin resumes them.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS uploads_paused_at TIMESTAMPTZ;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS uploads_resumed_at TIMESTAMPTZ;
+`,
+  },
 ];

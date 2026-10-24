@@ -9,6 +9,37 @@ import { query } from "@/lib/db";
 import { IMAGE_ID_RE } from "@/lib/ids";
 import { getImage, removeImage } from "@/lib/images";
 import { links, type ImageRow } from "@/lib/links";
+import { LABEL_TEXT, resumeUploads, screeningStatus } from "@/lib/moderation";
+
+const pct = (n: unknown) =>
+  typeof n === "number" ? `${Math.round(n * 100)}%` : "";
+
+/** "Adult content 93%, Self-harm 81%": what screening found, with the matching scores. */
+function Findings({
+  labels,
+  scores,
+}: {
+  labels: string[] | null | undefined;
+  scores?: Record<string, number> | null;
+}) {
+  if (!labels?.length) return null;
+  const scoreFor: Record<string, string> = {
+    adult: "adult",
+    graphic_violence: "graphic_violence",
+    self_harm: "self_harm",
+    abusive_name: "name_abuse",
+  };
+  return (
+    <div className="findings">
+      {labels.map((l) => (
+        <span key={l} className="finding">
+          {LABEL_TEXT[l] ?? l}
+          {scores && scoreFor[l] ? ` ${pct(scores[scoreFor[l]!])}` : ""}
+        </span>
+      ))}
+    </div>
+  );
+}
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Moderation", robots: { index: false } };
@@ -110,6 +141,14 @@ function Actions({
   );
 }
 
+async function resumeAction(formData: FormData) {
+  "use server";
+  await requireAdmin();
+  const id = String(formData.get("user_id") || "");
+  if (id) await resumeUploads(id);
+  revalidatePath("/admin");
+}
+
 async function setUserPlan(formData: FormData) {
   "use server";
   await requireAdmin();
@@ -150,6 +189,19 @@ type UserRow = {
   stored: string;
   keys: string;
   paying: boolean;
+  uploads_paused_at: Date | null;
+};
+
+type BlockedRow = {
+  id: string;
+  created_at: Date;
+  fail_reason: string;
+  moderation_labels: string[] | null;
+  moderation_scores: Record<string, number> | null;
+  uploader_ip: string | null;
+  source: string;
+  original_name: string | null;
+  email: string | null;
 };
 
 export default async function AdminPage({
@@ -175,14 +227,25 @@ export default async function AdminPage({
   const users =
     view === "users"
       ? await query<UserRow>(
-          `SELECT u.id, u.email, u.display_name, u.role, u.status, u.plan, u.created_at,
+          `SELECT u.id, u.email, u.display_name, u.role, u.status, u.plan, u.created_at, u.uploads_paused_at,
                   (SELECT count(*) FROM images i WHERE i.user_id = u.id AND i.status IN ('active','flagged')) AS images,
                   (SELECT COALESCE(sum(COALESCE(i.stored_bytes, i.size_bytes, 0)), 0) FROM images i
                     WHERE i.user_id = u.id AND i.status IN ('active','flagged')) AS stored,
                   (SELECT count(*) FROM api_keys k WHERE k.user_id = u.id AND k.revoked_at IS NULL) AS keys,
                   EXISTS (SELECT 1 FROM subscriptions s WHERE s.user_id = u.id
                            AND s.status IN ('active', 'trialing', 'past_due')) AS paying
-             FROM users u ORDER BY u.created_at DESC LIMIT 200`,
+             FROM users u ORDER BY (u.uploads_paused_at IS NOT NULL) DESC, u.created_at DESC LIMIT 200`,
+        )
+      : [];
+
+  const blocked =
+    view === "blocked"
+      ? await query<BlockedRow>(
+          `SELECT i.id, i.created_at, i.fail_reason, i.moderation_labels, i.moderation_scores, i.uploader_ip,
+                  i.source, i.original_name, u.email
+             FROM images i LEFT JOIN users u ON u.id = i.user_id
+            WHERE i.fail_reason LIKE 'blocked%'
+            ORDER BY i.created_at DESC LIMIT 200`,
         )
       : [];
 
@@ -198,11 +261,16 @@ export default async function AdminPage({
     open: string;
     flagged: string;
     total: string;
+    blocked: string;
+    paused: string;
   }>(
     `SELECT (SELECT count(*) FROM reports WHERE status = 'open') AS open,
             (SELECT count(*) FROM images WHERE status = 'flagged') AS flagged,
-            (SELECT count(*) FROM images WHERE status IN ('active', 'flagged')) AS total`,
+            (SELECT count(*) FROM images WHERE status IN ('active', 'flagged')) AS total,
+            (SELECT count(*) FROM images WHERE fail_reason LIKE 'blocked%' AND created_at > now() - interval '24 hours') AS blocked,
+            (SELECT count(*) FROM users WHERE uploads_paused_at IS NOT NULL) AS paused`,
   );
+  const screening = screeningStatus();
 
   return (
     <div style={{ display: "grid", gap: 24 }}>
@@ -211,10 +279,45 @@ export default async function AdminPage({
           <h1>Moderation</h1>
           <p>
             {counts?.open} open report{counts?.open === "1" ? "" : "s"},{" "}
-            {counts?.flagged} flagged, {counts?.total} live images.
+            {counts?.flagged} flagged, {counts?.blocked} blocked in the last 24
+            hours
+            {counts && counts.paused !== "0"
+              ? `, ${counts.paused} account${counts.paused === "1" ? "" : "s"} with uploads paused`
+              : ""}
+            , {counts?.total} live images.
           </p>
         </div>
       </div>
+      <p className={`screening-status ${screening.enabled ? "on" : "off"}`}>
+        {screening.enabled ? (
+          <>
+            <strong>Automatic screening is on</strong> (
+            {screening.provider === "openai"
+              ? "OpenAI moderation"
+              : "your webhook"}
+            ). Adult images are{" "}
+            {screening.adult === "block"
+              ? "blocked"
+              : screening.adult === "flag"
+                ? "marked sensitive"
+                : "allowed"}
+            , graphic violence is{" "}
+            {screening.gore === "block"
+              ? "blocked"
+              : screening.gore === "flag"
+                ? "marked sensitive"
+                : "allowed"}
+            , self-harm is marked sensitive. Removed images you block also block
+            look-alikes.
+          </>
+        ) : (
+          <>
+            <strong>Automatic screening is off.</strong> Set{" "}
+            <code>OPENAI_API_KEY</code> to screen every upload for adult
+            content, graphic violence and self-harm (free). See MODERATION.md.
+          </>
+        )}
+      </p>
       <nav className="segmented" aria-label="Moderation views">
         <Link
           href="/admin?view=reports"
@@ -227,6 +330,12 @@ export default async function AdminPage({
           aria-current={view === "flagged" ? "page" : undefined}
         >
           Flagged
+        </Link>
+        <Link
+          href="/admin?view=blocked"
+          aria-current={view === "blocked" ? "page" : undefined}
+        >
+          Blocked uploads
         </Link>
         <Link
           href="/admin?view=recent"
@@ -319,6 +428,20 @@ export default async function AdminPage({
                       {u.role === "admin" ? ", admin" : ""}
                       {u.status !== "active" ? `, ${u.status}` : ""}
                     </div>
+                    {u.uploads_paused_at && (
+                      <form action={resumeAction} className="paused-row">
+                        <span
+                          className="status-chip warn"
+                          title={`Since ${new Date(u.uploads_paused_at).toLocaleString("en-GB")}`}
+                        >
+                          Uploads paused
+                        </span>
+                        <input type="hidden" name="user_id" value={u.id} />
+                        <button className="btn secondary small" type="submit">
+                          Resume uploads
+                        </button>
+                      </form>
+                    )}
                   </td>
                   <td>{u.images}</td>
                   <td>
@@ -388,6 +511,59 @@ export default async function AdminPage({
         </div>
       )}
 
+      {view === "blocked" &&
+        (blocked.length === 0 ? (
+          <p>No blocked uploads.</p>
+        ) : (
+          <>
+            <p className="detail" style={{ margin: 0 }}>
+              Blocked images are never stored, so there&apos;s nothing to view
+              here: just who tried, when and why. Accounts with repeated blocks
+              have their uploads paused; review them under Users.
+            </p>
+            <div className="table-scroll">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>When</th>
+                    <th>Uploaded by</th>
+                    <th>Why</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {blocked.map((b) => (
+                    <tr key={b.id}>
+                      <td>
+                        {new Date(b.created_at).toLocaleString("en-GB")}
+                        <div className="detail">{b.original_name ?? b.id}</div>
+                      </td>
+                      <td>
+                        {b.email ?? "Guest"}{" "}
+                        <SourceTag
+                          source={b.source === "api" ? "api" : "web"}
+                        />
+                        <div className="detail">{b.uploader_ip ?? ""}</div>
+                      </td>
+                      <td>
+                        <Findings
+                          labels={
+                            b.moderation_labels ??
+                            (b.fail_reason === "blocked_file" ||
+                            b.fail_reason === "blocked_content"
+                              ? ["blocked_file"]
+                              : [])
+                          }
+                          scores={b.moderation_scores}
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        ))}
+
       {(view === "flagged" || view === "recent") &&
         (images.length === 0 ? (
           <p>Nothing here.</p>
@@ -422,6 +598,10 @@ export default async function AdminPage({
                           {new Date(img.created_at).toLocaleString("en-GB")}
                           {img.status === "flagged" ? ", flagged" : ""}
                         </div>
+                        <Findings
+                          labels={img.moderation_labels}
+                          scores={img.moderation_scores}
+                        />
                       </td>
                       <td>
                         <Actions

@@ -6,6 +6,7 @@ import type { ImageRow, VariantRow } from "./links";
 import { purgeUrls } from "./cdn";
 import { links } from "./links";
 import { addImagesToAlbum, assertAlbumOwner } from "./albums";
+import { assertUploadsAllowed } from "./moderation";
 import { assertStorageAvailable } from "./quota";
 import { deleteObjects } from "./s3";
 import { safeStem } from "./filetype";
@@ -50,6 +51,8 @@ export async function createPendingImage(opts: {
     const client = await pool.connect();
     try {
       await client.query("BEGIN");
+      // Accounts (or guest IPs) paused after repeated blocked uploads can't upload.
+      await assertUploadsAllowed(client, opts.userId, opts.uploaderIp);
       // Accounts have a storage allowance; refuse the upload before anything is stored.
       if (opts.albumId)
         await assertAlbumOwner(client, opts.albumId, opts.userId);
@@ -131,9 +134,11 @@ export async function removeImage(
   const l = links(img);
   await purgeUrls([l.direct, l.thumb, l.medium]);
   if (opts.blockReason && img.sha256) {
+    // The perceptual hash also blocks resized or re-saved copies of the image.
     await query(
-      `INSERT INTO blocked_hashes (sha256, reason) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
-      [img.sha256, opts.blockReason],
+      `INSERT INTO blocked_hashes (sha256, reason, phash) VALUES ($1, $2, $3)
+       ON CONFLICT (sha256) DO UPDATE SET phash = COALESCE(blocked_hashes.phash, EXCLUDED.phash)`,
+      [img.sha256, opts.blockReason, img.phash ?? null],
     );
   }
   if (opts.keepRecord) {
@@ -148,7 +153,16 @@ export async function removeImage(
 export function failureToError(reason: string | null | undefined): ApiError {
   switch (reason) {
     case "blocked_content":
-      return new ApiError("blocked_content", "This image cannot be uploaded");
+    case "blocked_file":
+      return new ApiError(
+        "blocked_content",
+        "This image can't be uploaded: it was removed from this site for breaking our rules.",
+      );
+    case "blocked_screening":
+      return new ApiError(
+        "blocked_content",
+        `This image was blocked by our automatic safety check because it appears to break our content rules. If you think this is a mistake, email ${config.contactEmail}.`,
+      );
     case "unsupported_type":
       return new ApiError(
         "unsupported_type",

@@ -22,6 +22,9 @@ export type ImageRow = {
   original_name: string | null;
   sha256: string | null;
   source?: "web" | "api";
+  moderation_labels?: string[] | null;
+  moderation_scores?: Record<string, number> | null;
+  phash?: string | null;
 };
 
 export type VariantRow = {

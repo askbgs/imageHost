@@ -44,7 +44,8 @@ const storage = r2Account
       // Endpoint the app and worker use (inside Docker: http://minio:9000).
       endpoint: process.env.S3_ENDPOINT || undefined,
       // Endpoint browsers use for presigned PUTs. Defaults to endpoint.
-      publicEndpoint: process.env.S3_PUBLIC_ENDPOINT || process.env.S3_ENDPOINT || undefined,
+      publicEndpoint:
+        process.env.S3_PUBLIC_ENDPOINT || process.env.S3_ENDPOINT || undefined,
       region: env("S3_REGION", "auto"),
       bucket: env("S3_BUCKET", "pinpicx"),
       accessKeyId: env("S3_ACCESS_KEY_ID", "minioadmin"),
@@ -60,7 +61,9 @@ const storage = r2Account
 type Delivery = "public" | "redirect" | "proxy";
 const deliveryRaw = (process.env.IMAGE_DELIVERY || "").toLowerCase();
 const imageDelivery: Delivery =
-  deliveryRaw === "public" || deliveryRaw === "redirect" || deliveryRaw === "proxy"
+  deliveryRaw === "public" ||
+  deliveryRaw === "redirect" ||
+  deliveryRaw === "proxy"
     ? deliveryRaw
     : r2PublicUrl
       ? "public"
@@ -68,7 +71,9 @@ const imageDelivery: Delivery =
         ? "redirect"
         : "proxy";
 if (imageDelivery === "public" && !r2PublicUrl && !process.env.IMAGE_BASE_URL) {
-  throw new Error("IMAGE_DELIVERY=public needs R2_PUBLIC_URL (the bucket's custom domain)");
+  throw new Error(
+    "IMAGE_DELIVERY=public needs R2_PUBLIC_URL (the bucket's custom domain)",
+  );
 }
 
 export const config = {
@@ -81,7 +86,10 @@ export const config = {
     : env("IMAGE_BASE_URL", `${siteUrl}/i`)
   ).replace(/\/$/, ""),
 
-  databaseUrl: env("DATABASE_URL", "postgres://pinpicx:pinpicx@localhost:5432/pinpicx"),
+  databaseUrl: env(
+    "DATABASE_URL",
+    "postgres://pinpicx:pinpicx@localhost:5432/pinpicx",
+  ),
   redisUrl: env("REDIS_URL", "redis://localhost:6379"),
 
   s3: storage,
@@ -114,7 +122,10 @@ export const config = {
 
   // "direct": browsers PUT to storage with presigned URLs (needs bucket CORS).
   // "server": browsers POST the file to this app, which stores it (works everywhere).
-  uploadMode: env("UPLOAD_MODE", "direct") === "server" ? ("server" as const) : ("direct" as const),
+  uploadMode:
+    env("UPLOAD_MODE", "direct") === "server"
+      ? ("server" as const)
+      : ("direct" as const),
 
   // Accounts
   allowSignup: env("ALLOW_SIGNUP", "true") === "true",
@@ -127,13 +138,44 @@ export const config = {
     .filter(Boolean),
   sessionDays: int("SESSION_DAYS", 30),
 
-  // Optional: an HTTP endpoint that scores images for NSFW content (see lib/moderation.ts).
-  moderationWebhookUrl: process.env.MODERATION_WEBHOOK_URL || "",
-  moderationThreshold: Number(process.env.MODERATION_THRESHOLD || "0.8"),
+  // Automatic screening of uploads (see lib/moderation.ts and MODERATION.md).
+  moderation: {
+    /** openai | webhook | off. Default: openai when OPENAI_API_KEY is set, else webhook when its URL is set. */
+    provider: (process.env.MODERATION_PROVIDER ||
+      (process.env.OPENAI_API_KEY
+        ? "openai"
+        : process.env.MODERATION_WEBHOOK_URL
+          ? "webhook"
+          : "off")) as "openai" | "webhook" | "off",
+    openaiKey: process.env.OPENAI_API_KEY || "",
+    openaiModel:
+      process.env.OPENAI_MODERATION_MODEL || "omni-moderation-latest",
+    openaiUrl:
+      process.env.OPENAI_MODERATION_URL ||
+      "https://api.openai.com/v1/moderations",
+    webhookUrl: process.env.MODERATION_WEBHOOK_URL || "",
+    /** Score (0–1) at which a category counts. */
+    threshold: Number(process.env.MODERATION_THRESHOLD || "0.8"),
+    /** What to do with adult (sexual) images: flag = mark sensitive and blur; block = refuse; allow. */
+    adult: (process.env.MODERATION_ADULT || "flag") as
+      "flag" | "block" | "allow",
+    /** Graphic violence (gore). */
+    gore: (process.env.MODERATION_GORE || "flag") as "flag" | "block" | "allow",
+    /** When the screening service can't be reached: allow (go live) or flag (hold as sensitive for review). */
+    onError: (process.env.MODERATION_ON_ERROR || "allow") as "allow" | "flag",
+    /** Pause an account's uploads after this many blocked uploads within 24 hours (0 = never). */
+    pauseAfter: Math.max(0, Number(process.env.MODERATION_PAUSE_AFTER || "3")),
+    /** Perceptual-hash distance (bits of 64) at which an image counts as a look-alike of a blocked one. */
+    lookalikeBits: Math.max(
+      0,
+      Number(process.env.MODERATION_LOOKALIKE_BITS || "6"),
+    ),
+  },
 
   abuseEmail: env("ABUSE_EMAIL", "abuse@example.com"),
   // Where plan upgrades and sales questions go. Defaults to ABUSE_EMAIL.
   /** Days after a payment in which a full refund can be asked for (shown on /refunds). */
   refundDays: int("REFUND_DAYS", 14),
-  contactEmail: process.env.CONTACT_EMAIL || env("ABUSE_EMAIL", "abuse@example.com"),
+  contactEmail:
+    process.env.CONTACT_EMAIL || env("ABUSE_EMAIL", "abuse@example.com"),
 };

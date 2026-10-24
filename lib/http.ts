@@ -14,6 +14,7 @@ export type ErrorCode =
   | "blocked_content"
   | "rate_limited"
   | "storage_full"
+  | "uploads_paused"
   | "url_fetch_failed"
   | "processing"
   | "server_error";
@@ -31,6 +32,7 @@ const STATUS: Record<ErrorCode, number> = {
   blocked_content: 422,
   rate_limited: 429,
   storage_full: 403,
+  uploads_paused: 403,
   url_fetch_failed: 502,
   processing: 202,
   server_error: 500,

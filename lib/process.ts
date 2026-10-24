@@ -6,7 +6,14 @@ import { query } from "./db";
 import { OUTPUT, sniffImage, type ImageKind } from "./filetype";
 import { getImage } from "./images";
 import type { ProcessResult } from "./queue";
-import { isBlockedHash, nsfwScore } from "./moderation";
+import {
+  isBlockedHash,
+  isBlockedLookalike,
+  noteBlockedUpload,
+  perceptualHash,
+  screenImage,
+  type Verdict,
+} from "./moderation";
 import { purgeUrls } from "./cdn";
 import { links } from "./links";
 import {
@@ -76,8 +83,15 @@ export async function processImage(imageId: string): Promise<ProcessResult> {
   if (!kind) return fail(imageId, "unsupported_type", img.upload_key);
 
   const sha256 = createHash("sha256").update(raw).digest("hex");
-  if (await isBlockedHash(sha256))
-    return fail(imageId, "blocked_content", img.upload_key);
+  if (await isBlockedHash(sha256)) {
+    await query(
+      `UPDATE images SET moderation_labels = $2, sha256 = $3 WHERE id = $1`,
+      [imageId, ["blocked_file"], sha256],
+    );
+    const result = await fail(imageId, "blocked_file", img.upload_key);
+    await noteBlockedUpload(img.user_id);
+    return result;
+  }
 
   const out = OUTPUT[kind];
   const animated = kind === "gif" || kind === "webp";
@@ -141,21 +155,40 @@ export async function processImage(imageId: string): Promise<ProcessResult> {
   const keys = imageKeys(imageId, slug);
   const cache = objectCacheControl(img.expires_at);
 
+  // Screen before anything is stored: a blocked image never reaches the bucket.
+  const still = await sharp(medium.data).jpeg({ quality: 85 }).toBuffer();
+  const phash = await perceptualHash(still);
+  let verdict: Verdict;
+  if (await isBlockedLookalike(phash)) {
+    verdict = {
+      action: "block",
+      labels: ["lookalike"],
+      scores: {},
+      provider: "phash",
+    };
+  } else {
+    verdict = await screenImage(still, img.title || img.original_name);
+  }
+  if (verdict.action === "block") {
+    await query(
+      `UPDATE images SET moderation_labels = $2, moderation_scores = $3, phash = $4, sha256 = $5 WHERE id = $1`,
+      [imageId, verdict.labels, JSON.stringify(verdict.scores), phash, sha256],
+    );
+    const result = await fail(imageId, "blocked_screening", img.upload_key);
+    await noteBlockedUpload(img.user_id);
+    console.warn(
+      `[moderation] blocked ${imageId} (${verdict.labels.join(", ")})`,
+    );
+    return result;
+  }
+
   await Promise.all([
     putObject(keys.original, original.data, out.mime, cache),
     putObject(keys.thumb, thumb.data, out.mime, cache),
     putObject(keys.medium, medium.data, out.mime, cache),
   ]);
 
-  // Score a still frame of the medium size: smaller and enough for a classifier.
-  const score = await nsfwScore(
-    await sharp(medium.data).jpeg().toBuffer(),
-    "image/jpeg",
-  );
-  const status =
-    score !== null && score >= config.moderationThreshold
-      ? "flagged"
-      : "active";
+  const status = verdict.action === "flag" ? "flagged" : "active";
 
   await query(`DELETE FROM image_variants WHERE image_id = $1`, [imageId]);
   await query(
@@ -180,7 +213,8 @@ export async function processImage(imageId: string): Promise<ProcessResult> {
   );
   await query(
     `UPDATE images SET status = $2, slug = $3, storage_key = $4, mime_type = $5, size_bytes = $6,
-            width = $7, height = $8, sha256 = $9, fail_reason = NULL, stored_bytes = $10
+            width = $7, height = $8, sha256 = $9, fail_reason = NULL, stored_bytes = $10,
+            moderation_labels = $11, moderation_scores = $12, phash = $13
       WHERE id = $1`,
     [
       imageId,
@@ -194,6 +228,11 @@ export async function processImage(imageId: string): Promise<ProcessResult> {
       sha256,
       // What this image takes up in storage, for the account's quota.
       original.data.length + thumb.data.length + medium.data.length,
+      verdict.labels.length ? verdict.labels : null,
+      Object.keys(verdict.scores).length
+        ? JSON.stringify(verdict.scores)
+        : null,
+      phash,
     ],
   );
   await deleteObjects([img.upload_key]).catch(() => {});
