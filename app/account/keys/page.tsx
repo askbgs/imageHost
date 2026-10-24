@@ -1,10 +1,12 @@
 import Link from "next/link";
 import { revokeApiKey } from "@/app/actions/account";
 import { KeyCreator } from "@/components/KeyCreator";
+import { StorageMeter } from "@/components/StorageMeter";
 import { requireUser } from "@/lib/auth";
 import { config } from "@/lib/config";
 import { query, queryOne } from "@/lib/db";
 import { apiRateKey, planFor, webRateKey } from "@/lib/plans";
+import { formatStorage, storageUsage } from "@/lib/quota";
 import { rateUsage } from "@/lib/ratelimit";
 
 export const metadata = { title: "API keys" };
@@ -42,9 +44,10 @@ export default async function KeysPage() {
     [user.id],
   );
   const none = { used: 0, resetIn: 0 };
-  const [usage, webUsage] = await Promise.all([
+  const [usage, webUsage, storage] = await Promise.all([
     rateUsage(apiRateKey(user.id)).catch(() => none),
     rateUsage(webRateKey(user.id)).catch(() => none),
+    storageUsage(user.id),
   ]);
   const used = Math.min(usage.used, plan.apiUploadsPerHour);
   const pct = plan.apiUploadsPerHour
@@ -84,7 +87,7 @@ export default async function KeysPage() {
               {plan.apiUploadsPerHour.toLocaleString("en")} API uploads per
               hour, shared by all your keys ·{" "}
               {plan.webUploadsPerHour.toLocaleString("en")} website uploads per
-              hour
+              hour · {formatStorage(plan.storageBytes)} storage
             </p>
           </div>
           <div className="plan-links">
@@ -99,6 +102,7 @@ export default async function KeysPage() {
           </div>
         </div>
         <div className="meters">
+          <StorageMeter usage={storage} />
           <div className="meter">
             <div className="meter-label">
               <span>API uploads this hour</span>

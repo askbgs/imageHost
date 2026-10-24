@@ -15,6 +15,7 @@ import {
   type PaidPlanId,
 } from "@/lib/paddle";
 import { PLANS, PLAN_IDS, type PlanId } from "@/lib/plans";
+import { formatStorage } from "@/lib/quota";
 
 export const metadata = {
   title: "Pricing",
@@ -93,7 +94,6 @@ export default async function PricingPage({
         : "";
 
   const base = [
-    "No limit on how many images you keep",
     `Files up to ${mb} MB`,
     "Direct links, HTML, BBCode and Markdown",
     "Location and camera data removed",
@@ -155,6 +155,7 @@ export default async function PricingPage({
     }
 
     const features = [
+      `${formatStorage(p.storageBytes)} storage`,
       `${p.maxApiKeys} API key${p.maxApiKeys === 1 ? "" : "s"}`,
       `${n(p.webUploadsPerHour)} website uploads per hour`,
       `${n(p.apiUploadsPerHour)} API uploads per hour`,
@@ -251,6 +252,12 @@ export default async function PricingPage({
                     <td key={id}>
                       <Money amount={monthly(id)} />
                     </td>
+                  ))}
+                </tr>
+                <tr>
+                  <th scope="row">Storage</th>
+                  {PLAN_IDS.map((id) => (
+                    <td key={id}>{formatStorage(PLANS[id].storageBytes)}</td>
                   ))}
                 </tr>
                 <tr>
@@ -360,11 +367,22 @@ export default async function PricingPage({
             </p>
           </details>
           <details>
+            <summary>What counts towards my storage?</summary>
+            <p>
+              Every image you keep, including the thumbnail and preview sizes we
+              make for it. Deleted and expired images free their space straight
+              away. If you reach your limit, your images and links keep working;
+              you just can&apos;t upload more until you delete some or upgrade.
+            </p>
+          </details>
+          <details>
             <summary>Can I go back to Free?</summary>
             <p>
               Yes. Your images stay where they are. If you have more keys than
               Free allows, they keep working, but you can&apos;t create new ones
-              until you&apos;re under the limit.
+              until you&apos;re under the limit. The same goes for storage: if
+              you&apos;re over Free&apos;s allowance, nothing is deleted, but
+              new uploads wait until you&apos;re back under it.
             </p>
           </details>
         </section>

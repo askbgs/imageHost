@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import { SourceTag } from "@/components/SourceTag";
+import { formatStorage } from "@/lib/quota";
 import { requireAdmin } from "@/lib/auth";
-import { PLANS, PLAN_IDS } from "@/lib/plans";
+import { PLANS, PLAN_IDS, planFor } from "@/lib/plans";
 import { REPORT_LABELS, type ReportReason } from "@/lib/constants";
 import { query } from "@/lib/db";
 import { IMAGE_ID_RE } from "@/lib/ids";
@@ -146,6 +147,7 @@ type UserRow = {
   plan: string;
   created_at: Date;
   images: string;
+  stored: string;
   keys: string;
   paying: boolean;
 };
@@ -175,6 +177,8 @@ export default async function AdminPage({
       ? await query<UserRow>(
           `SELECT u.id, u.email, u.display_name, u.role, u.status, u.plan, u.created_at,
                   (SELECT count(*) FROM images i WHERE i.user_id = u.id AND i.status IN ('active','flagged')) AS images,
+                  (SELECT COALESCE(sum(COALESCE(i.stored_bytes, i.size_bytes, 0)), 0) FROM images i
+                    WHERE i.user_id = u.id AND i.status IN ('active','flagged')) AS stored,
                   (SELECT count(*) FROM api_keys k WHERE k.user_id = u.id AND k.revoked_at IS NULL) AS keys,
                   EXISTS (SELECT 1 FROM subscriptions s WHERE s.user_id = u.id
                            AND s.status IN ('active', 'trialing', 'past_due')) AS paying
@@ -299,6 +303,7 @@ export default async function AdminPage({
                 <th>Account</th>
                 <th>Images</th>
                 <th>Plan</th>
+                <th>Storage</th>
                 <th>API keys</th>
                 <th>Joined</th>
                 <th>Actions</th>
@@ -349,6 +354,12 @@ export default async function AdminPage({
                         Paid via Paddle
                       </div>
                     )}
+                  </td>
+                  <td>
+                    {formatStorage(Number(u.stored))}
+                    <div className="detail">
+                      of {formatStorage(planFor(u).storageBytes)}
+                    </div>
                   </td>
                   <td>{u.keys}</td>
                   <td>{new Date(u.created_at).toLocaleDateString("en-GB")}</td>

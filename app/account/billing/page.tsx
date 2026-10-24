@@ -11,6 +11,7 @@ import {
   paddleConfig,
 } from "@/lib/paddle";
 import { PLANS, planFor } from "@/lib/plans";
+import { formatStorage } from "@/lib/quota";
 
 export const metadata = { title: "Billing" };
 export const dynamic = "force-dynamic";
@@ -123,6 +124,9 @@ export default async function BillingPage({
           </div>
         </div>
         <ul className="billing-limits">
+          <li>
+            <strong>{formatStorage(plan.storageBytes)}</strong> storage
+          </li>
           <li>
             <strong>{plan.webUploadsPerHour.toLocaleString("en")}</strong>{" "}
             website uploads per hour

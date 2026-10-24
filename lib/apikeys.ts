@@ -3,14 +3,26 @@ import { query, queryOne } from "./db";
 import { ApiError, limitHeaders } from "./http";
 import { newApiKey } from "./ids";
 import { apiRateKey, planFor } from "./plans";
+import { assertNotFull } from "./quota";
 import { rateLimit } from "./ratelimit";
 
-export type ApiKey = { id: string; user_id: string; rate_limit: number; user_status: string; plan: string; role: string };
+export type ApiKey = {
+  id: string;
+  user_id: string;
+  rate_limit: number;
+  user_status: string;
+  plan: string;
+  role: string;
+};
 
-export const hashKey = (raw: string) => createHash("sha256").update(raw).digest("hex");
+export const hashKey = (raw: string) =>
+  createHash("sha256").update(raw).digest("hex");
 
 /** Find the API key in the query string, X-API-Key header, Bearer token, or a form field. */
-export function extractKey(req: Request, formKey?: FormDataEntryValue | null): string | null {
+export function extractKey(
+  req: Request,
+  formKey?: FormDataEntryValue | null,
+): string | null {
   const url = new URL(req.url);
   const fromQuery = url.searchParams.get("key");
   if (fromQuery) return fromQuery;
@@ -30,15 +42,19 @@ export async function authenticate(raw: string | null): Promise<ApiKey> {
       WHERE k.key_hash = $1 AND k.revoked_at IS NULL`,
     [hashKey(raw)],
   );
-  if (!key || key.user_status !== "active") throw new ApiError("invalid_key", "Invalid or revoked API key");
+  if (!key || key.user_status !== "active")
+    throw new ApiError("invalid_key", "Invalid or revoked API key");
   // Best effort; never block a request on this write.
-  query(`UPDATE api_keys SET last_used_at = now() WHERE id = $1`, [key.id]).catch(() => {});
+  query(`UPDATE api_keys SET last_used_at = now() WHERE id = $1`, [
+    key.id,
+  ]).catch(() => {});
   return key;
 }
 
 /** Throws rate_limited when the account is over its plan's hourly API upload limit. */
 export async function enforceKeyLimit(key: ApiKey) {
   const plan = planFor(key);
+  await assertNotFull(key.user_id);
   const r = await rateLimit(apiRateKey(key.user_id), plan.apiUploadsPerHour);
   if (!r.ok) {
     const mins = Math.max(1, Math.ceil(r.retryAfter / 60));
@@ -51,7 +67,11 @@ export async function enforceKeyLimit(key: ApiKey) {
   return r;
 }
 
-export async function createKey(userId: string, name: string, rateLimitPerHour = 100) {
+export async function createKey(
+  userId: string,
+  name: string,
+  rateLimitPerHour = 100,
+) {
   const raw = newApiKey();
   await query(
     `INSERT INTO api_keys (user_id, key_hash, key_prefix, name, rate_limit) VALUES ($1, $2, $3, $4, $5)`,

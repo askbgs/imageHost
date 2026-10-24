@@ -100,6 +100,7 @@ expiration  optional  delete after N seconds (60 to 15552000)`}</pre>
           <tr><td>413</td><td><code>file_too_large</code></td><td>The image is over {config.maxUploadBytes / 1024 / 1024} MB.</td></tr>
           <tr><td>415</td><td><code>unsupported_type</code></td><td>Not JPG, PNG, GIF, WebP, AVIF, BMP or TIFF. SVG and HEIC are not accepted.</td></tr>
           <tr><td>422</td><td><code>blocked_content</code></td><td>This file was removed before and cannot be uploaded again.</td></tr>
+          <tr><td>403</td><td><code>storage_full</code></td><td>Your account has used its plan&apos;s storage. Delete images or upgrade, then try again.</td></tr>
           <tr><td>429</td><td><code>rate_limited</code></td><td>Your account is over its plan&apos;s hourly upload limit; see the <code>Retry-After</code> header.</td></tr>
           <tr><td>502</td><td><code>url_fetch_failed</code></td><td>The image URL could not be downloaded.</td></tr>
         </tbody>

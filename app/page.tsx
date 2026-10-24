@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { IconCode, IconLink, IconShield, IconUpload } from "@/components/Icons";
+import { StorageNotice } from "@/components/StorageMeter";
 import { Uploader } from "@/components/Uploader";
 import { currentUser, displayName } from "@/lib/auth";
 import { config } from "@/lib/config";
+import { storageUsage } from "@/lib/quota";
 
 function Features() {
   const mb = config.maxUploadBytes / 1024 / 1024;
@@ -13,27 +15,40 @@ function Features() {
           <IconLink size={22} />
         </span>
         <h3>Links for anywhere</h3>
-        <p>Every upload comes with a direct link, a viewer page, and HTML, BBCode and Markdown embeds.</p>
+        <p>
+          Every upload comes with a direct link, a viewer page, and HTML, BBCode
+          and Markdown embeds.
+        </p>
       </div>
       <div className="feature">
         <span className="ico">
           <IconCode size={22} />
         </span>
         <h3>Upload from your apps</h3>
-        <p>Create API keys in your account and upload from scripts, ShareX, WordPress or n8n.</p>
+        <p>
+          Create API keys in your account and upload from scripts, ShareX,
+          WordPress or n8n.
+        </p>
       </div>
       <div className="feature">
         <span className="ico">
           <IconShield size={22} />
         </span>
         <h3>Private by default</h3>
-        <p>Location and camera data are removed from every image. Files up to {mb} MB, kept until you delete them.</p>
+        <p>
+          Location and camera data are removed from every image. Files up to{" "}
+          {mb} MB, kept until you delete them.
+        </p>
       </div>
     </section>
   );
 }
 
-export default async function Home({ searchParams }: { searchParams: Promise<{ deleted?: string }> }) {
+export default async function Home({
+  searchParams,
+}: {
+  searchParams: Promise<{ deleted?: string }>;
+}) {
   const { deleted } = await searchParams;
   const user = await currentUser();
   const canUpload = !!user || !config.requireLoginToUpload;
@@ -53,7 +68,8 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ d
             Get a link.
           </h1>
           <p className="lede">
-            Host images for forums, sites and chats. Direct links, thumbnails and embed codes, ready to paste.
+            Host images for forums, sites and chats. Direct links, thumbnails
+            and embed codes, ready to paste.
           </p>
         </section>
         <section className="frame" aria-label="Sign in to upload">
@@ -62,7 +78,9 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ d
             <IconUpload size={26} />
           </span>
           <p className="hint">Sign in to start uploading</p>
-          <p className="sub">An account keeps your images in one place and gives you API keys.</p>
+          <p className="sub">
+            An account keeps your images in one place and gives you API keys.
+          </p>
           <div className="controls">
             {config.allowSignup && (
               <Link href="/signup" className="btn primary">
@@ -74,7 +92,8 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ d
             </Link>
           </div>
           <p className="sub">
-            Free forever for personal use. <Link href="/pricing">See plans</Link>
+            Free forever for personal use.{" "}
+            <Link href="/pricing">See plans</Link>
           </p>
         </section>
         <Features />
@@ -82,20 +101,28 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ d
     );
   }
 
+  const usage = user ? await storageUsage(user.id).catch(() => null) : null;
+
   return (
     <>
       <section className="hero compact">
-        <h1>{user ? `Upload images, ${displayName(user)}` : "Drop an image. Get a link."}</h1>
+        <h1>
+          {user
+            ? `Upload images, ${displayName(user)}`
+            : "Drop an image. Get a link."}
+        </h1>
         <p className="lede">
           {user ? (
             <>
-              Everything you upload is saved in <Link href="/account">My images</Link>.
+              Everything you upload is saved in{" "}
+              <Link href="/account">My images</Link>.
             </>
           ) : (
             "Direct links, HTML and BBCode thumbnails, and Markdown, ready to paste."
           )}
         </p>
       </section>
+      {usage && <StorageNotice usage={usage} />}
       <Uploader maxBytes={config.maxUploadBytes} mode={config.uploadMode} />
       {!user && <Features />}
     </>

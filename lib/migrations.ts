@@ -197,4 +197,19 @@ CREATE TABLE IF NOT EXISTS paddle_events (
 );
 `,
   },
+  {
+    id: 6,
+    name: "storage quota",
+    sql: `
+-- Bytes kept in storage for an image: the original plus its thumbnails. Set when processing finishes.
+ALTER TABLE images ADD COLUMN IF NOT EXISTS stored_bytes BIGINT;
+-- Size received or declared at upload. Holds the space while the image is still being processed.
+ALTER TABLE images ADD COLUMN IF NOT EXISTS upload_bytes BIGINT;
+UPDATE images i
+   SET stored_bytes = COALESCE(i.size_bytes, 0)
+                    + COALESCE((SELECT sum(v.size_bytes) FROM image_variants v WHERE v.image_id = i.id), 0)
+ WHERE i.stored_bytes IS NULL AND i.status IN ('active', 'flagged');
+CREATE INDEX IF NOT EXISTS idx_images_user_status ON images (user_id, status);
+`,
+  },
 ];

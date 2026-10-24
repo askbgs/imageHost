@@ -2,9 +2,11 @@ import Link from "next/link";
 import { ImageGallery } from "@/components/ImageGallery";
 import type { GalleryImage } from "@/components/Lightbox";
 import { IconUpload } from "@/components/Icons";
+import { StorageMeter } from "@/components/StorageMeter";
 import { requireUser } from "@/lib/auth";
 import { query } from "@/lib/db";
 import { embedCodes, links, type ImageRow } from "@/lib/links";
+import { storageUsage } from "@/lib/quota";
 
 export const metadata = { title: "My images" };
 
@@ -23,7 +25,9 @@ function timeLeft(date: Date) {
   return `${Math.round(s / 86400)} d`;
 }
 
-type Props = { searchParams: Promise<{ q?: string; page?: string; source?: string }> };
+type Props = {
+  searchParams: Promise<{ q?: string; page?: string; source?: string }>;
+};
 
 export default async function MyImages({ searchParams }: Props) {
   const user = await requireUser("/account");
@@ -32,7 +36,9 @@ export default async function MyImages({ searchParams }: Props) {
   const page = Math.max(1, Number.parseInt(pageRaw || "1", 10) || 1);
   const search = q.trim().slice(0, 100);
 
-  const rows = await query<ImageRow & { total: string; key_name: string | null }>(
+  const rows = await query<
+    ImageRow & { total: string; key_name: string | null }
+  >(
     `SELECT i.*, k.name AS key_name, count(*) OVER () AS total
        FROM images i LEFT JOIN api_keys k ON k.id = i.api_key_id
       WHERE i.user_id = $1 AND i.status IN ('active', 'flagged')
@@ -40,7 +46,14 @@ export default async function MyImages({ searchParams }: Props) {
         AND ($2 = '' OR i.title ILIKE $5 OR i.slug ILIKE $5)
         AND ($6 = '' OR i.source = $6)
       ORDER BY i.created_at DESC LIMIT $3 OFFSET $4`,
-    [user.id, search, PER_PAGE, (page - 1) * PER_PAGE, `%${search.replace(/[\\%_]/g, (m) => `\\${m}`)}%`, source],
+    [
+      user.id,
+      search,
+      PER_PAGE,
+      (page - 1) * PER_PAGE,
+      `%${search.replace(/[\\%_]/g, (m) => `\\${m}`)}%`,
+      source,
+    ],
   );
   // Counts for the filter tabs (ignoring the current filter, respecting the search).
   const counts = await query<{ source: string; n: string }>(
@@ -50,7 +63,9 @@ export default async function MyImages({ searchParams }: Props) {
       GROUP BY source`,
     [user.id, search, `%${search.replace(/[\\%_]/g, (m) => `\\${m}`)}%`],
   );
-  const countOf = (s: string) => Number(counts.find((c) => c.source === s)?.n ?? 0);
+  const usage = await storageUsage(user.id);
+  const countOf = (s: string) =>
+    Number(counts.find((c) => c.source === s)?.n ?? 0);
   const allCount = countOf("web") + countOf("api");
   const total = Number(rows[0]?.total ?? 0);
   const pages = Math.max(1, Math.ceil(total / PER_PAGE));
@@ -69,7 +84,11 @@ export default async function MyImages({ searchParams }: Props) {
       width: r.width ?? 0,
       height: r.height ?? 0,
       size: formatBytes(Number(r.size_bytes ?? 0)),
-      uploaded: new Date(r.created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }),
+      uploaded: new Date(r.created_at).toLocaleDateString("en-GB", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      }),
       flagged: r.status === "flagged",
       source: r.source === "api" ? "api" : "web",
       keyName: r.key_name,
@@ -108,30 +127,55 @@ export default async function MyImages({ searchParams }: Props) {
         </Link>
       </div>
 
+      <section className="panel storage-panel" aria-label="Storage">
+        <StorageMeter usage={usage} />
+      </section>
+
       {(allCount > 0 || search || source) && (
         <div className="toolbar">
           <form role="search" action="/account">
             <label htmlFor="q" className="sr-only">
               Search by name
             </label>
-            <input id="q" name="q" type="search" placeholder="Search by name" defaultValue={search} />
+            <input
+              id="q"
+              name="q"
+              type="search"
+              placeholder="Search by name"
+              defaultValue={search}
+            />
             <button type="submit" className="btn secondary">
               Search
             </button>
           </form>
           {search && (
-            <Link href={source ? `/account?source=${source}` : "/account"} className="btn ghost small">
+            <Link
+              href={source ? `/account?source=${source}` : "/account"}
+              className="btn ghost small"
+            >
               Clear search
             </Link>
           )}
-          <nav className="segmented" aria-label="Filter by how images were uploaded">
-            <Link href={filterHref("")} aria-current={source === "" ? "page" : undefined}>
+          <nav
+            className="segmented"
+            aria-label="Filter by how images were uploaded"
+          >
+            <Link
+              href={filterHref("")}
+              aria-current={source === "" ? "page" : undefined}
+            >
               All <span className="seg-count">{allCount}</span>
             </Link>
-            <Link href={filterHref("web")} aria-current={source === "web" ? "page" : undefined}>
+            <Link
+              href={filterHref("web")}
+              aria-current={source === "web" ? "page" : undefined}
+            >
               Web <span className="seg-count">{countOf("web")}</span>
             </Link>
-            <Link href={filterHref("api")} aria-current={source === "api" ? "page" : undefined}>
+            <Link
+              href={filterHref("api")}
+              aria-current={source === "api" ? "page" : undefined}
+            >
               API <span className="seg-count">{countOf("api")}</span>
             </Link>
           </nav>
@@ -149,7 +193,11 @@ export default async function MyImages({ searchParams }: Props) {
                   ? "No images uploaded on the website yet"
                   : "No images yet"}
           </h2>
-          <p>{search ? "Try another word, or clear the search." : "Drop an image on the upload page and it will show up here with its links."}</p>
+          <p>
+            {search
+              ? "Try another word, or clear the search."
+              : "Drop an image on the upload page and it will show up here with its links."}
+          </p>
           {!search && (
             <Link href="/" className="btn primary">
               Upload your first image

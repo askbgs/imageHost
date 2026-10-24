@@ -753,7 +753,7 @@ body:has(.bulk-bar) .toasts { bottom: 84px; }
   background: var(--accent-soft);
   color: var(--accent);
 }
-.meters { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px 32px; margin-top: 20px; }
+.meters { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px 32px; margin-top: 20px; }
 @media (max-width: 640px) { .meters { grid-template-columns: 1fr; } }
 .meter { display: grid; gap: 6px; }
 .meter-label { display: flex; justify-content: space-between; font-size: 14px; color: var(--muted); }
@@ -864,3 +864,9 @@ body:has(.bulk-bar) .toasts { bottom: 84px; }
 .billing-limits strong { color: var(--ink); }
 .billing-actions { display: flex; flex-wrap: wrap; gap: 10px; padding-top: 20px; border-top: 1px solid var(--line); }
 .plan-links { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* Storage quota */
+.meter-hint.warn { color: var(--warn); }
+.meter-hint a { color: inherit; font-weight: 600; }
+.storage-panel { padding: 16px 20px; margin-bottom: 20px; }
+.storage-notice { max-width: 1080px; margin: 0 auto 16px; }

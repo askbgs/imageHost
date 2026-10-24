@@ -5,6 +5,7 @@ import { IMAGE_ID_RE, tokenMatches } from "./ids";
 import { getImage } from "./images";
 import { ApiError, clientIp, limitHeaders } from "./http";
 import { planFor, webRateKey } from "./plans";
+import { assertNotFull } from "./quota";
 import { rateLimit } from "./ratelimit";
 
 /**
@@ -43,6 +44,7 @@ export async function webUploadGate(
     [user.id],
   );
   const plan = planFor(account ?? {});
+  await assertNotFull(user.id);
   const rl = await rateLimit(webRateKey(user.id), plan.webUploadsPerHour);
   if (!rl.ok) {
     const upgrade =

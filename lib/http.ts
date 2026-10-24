@@ -13,6 +13,7 @@ export type ErrorCode =
   | "unsupported_type"
   | "blocked_content"
   | "rate_limited"
+  | "storage_full"
   | "url_fetch_failed"
   | "processing"
   | "server_error";
@@ -29,6 +30,7 @@ const STATUS: Record<ErrorCode, number> = {
   unsupported_type: 415,
   blocked_content: 422,
   rate_limited: 429,
+  storage_full: 403,
   url_fetch_failed: 502,
   processing: 202,
   server_error: 500,

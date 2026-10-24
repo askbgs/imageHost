@@ -8,6 +8,8 @@ export type Plan = {
   label: string;
   maxApiKeys: number;
   apiUploadsPerHour: number;
+  /** Total storage for the account's images (originals plus thumbnails), in bytes. */
+  storageBytes: number;
   /** Uploads per hour from the website (drag and drop, paste, URL), counted separately from API uploads. */
   webUploadsPerHour: number;
   /** Monthly price in PRICE_CURRENCY (default LKR; 0 = free). Yearly billing is 10 × monthly: two months free. */
@@ -31,6 +33,13 @@ function price(name: string, fallback: number) {
   return fallback;
 }
 
+const GB = 1024 ** 3;
+/** Storage from the environment in GB (decimals allowed, e.g. 0.5). */
+function gb(name: string, fallback: number) {
+  const n = Number.parseFloat(process.env[name] || "");
+  return Math.round((Number.isFinite(n) && n > 0 ? n : fallback) * GB);
+}
+
 const paidWebDefault = int("USER_UPLOADS_PER_HOUR", 200);
 
 export const PLANS: Record<PlanId, Plan> = {
@@ -39,6 +48,7 @@ export const PLANS: Record<PlanId, Plan> = {
     label: "Free",
     maxApiKeys: int("FREE_API_KEYS", 1),
     apiUploadsPerHour: int("FREE_API_UPLOADS_PER_HOUR", 10),
+    storageBytes: gb("FREE_STORAGE_GB", 1),
     webUploadsPerHour: int("FREE_WEB_UPLOADS_PER_HOUR", 50),
     price: 0,
     tagline: "For personal use and trying out the API.",
@@ -49,6 +59,7 @@ export const PLANS: Record<PlanId, Plan> = {
     label: "Pro",
     maxApiKeys: int("PRO_API_KEYS", 5),
     apiUploadsPerHour: int("PRO_API_UPLOADS_PER_HOUR", 500),
+    storageBytes: gb("PRO_STORAGE_GB", 50),
     webUploadsPerHour: int("PRO_WEB_UPLOADS_PER_HOUR", paidWebDefault),
     price: price("PRO", 990),
     tagline: "For creators and automations that upload every day.",
@@ -59,6 +70,7 @@ export const PLANS: Record<PlanId, Plan> = {
     label: "Business",
     maxApiKeys: int("BUSINESS_API_KEYS", 20),
     apiUploadsPerHour: int("BUSINESS_API_UPLOADS_PER_HOUR", 5000),
+    storageBytes: gb("BUSINESS_STORAGE_GB", 500),
     webUploadsPerHour: int("BUSINESS_WEB_UPLOADS_PER_HOUR", paidWebDefault),
     price: price("BUSINESS", 4900),
     tagline: "For shops, agencies and apps that run on images.",

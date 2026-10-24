@@ -36,7 +36,7 @@ export async function ingestBytes(opts: {
   const kind = sniffImage(opts.bytes);
   if (!kind) throw new ApiError("unsupported_type", "Unsupported image type (JPG, PNG, GIF, WebP, AVIF, BMP, TIFF)");
 
-  const img = await createPendingImage(opts);
+  const img = await createPendingImage({ ...opts, bytes: opts.bytes.length });
   await putObject(img.upload_key, opts.bytes, MIME[kind]);
   return finalize(img.id);
 }
