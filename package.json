@@ -5,6 +5,7 @@
   "description": "Self-hosted image hosting with drag-and-drop uploads and an upload API",
   "scripts": {
     "dev": "next dev",
+    "prebuild": "node scripts/clean-stale.mjs",
     "build": "next build && npm run build:worker",
     "build:worker": "esbuild worker/worker.ts scripts/migrate.ts scripts/create-api-key.ts scripts/setup-bucket.ts scripts/migrate-storage.ts --bundle --platform=node --target=node20 --outdir=dist --entry-names=[name] --packages=external --tsconfig=tsconfig.json",
     "start": "next start",

@@ -166,3 +166,14 @@ Image processing with sharp is memory-hungry on large images; give the worker at
 - Old site links (`https://yoursite.com/i/...`) forward to the R2 domain.
 
 Sources: [Understanding your bill](https://docs.railway.com/pricing/understanding-your-bill), [Config as Code deprecation](https://docs.railway.com/config-as-code/reference), [railway ssh](https://docs.railway.com/cli/ssh).
+
+## Updating to a new version
+
+Replace the files in your repository with the new version, **including deleting files the new version no longer
+has**, then push. Copying new files over old ones leaves old files behind. For example, a leftover `middleware.ts`
+from the first version answers `/admin` with *"Admin is disabled: set ADMIN_PASSWORD"*. The build removes that
+particular file automatically and says so in the build log, but delete it from the repository as well.
+
+An easy way to replace everything: in your local copy of the repository, delete everything except the `.git`
+folder, unzip the new version into it, then commit and push. `git status` shows exactly which old files go away.
+
