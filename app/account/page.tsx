@@ -23,22 +23,35 @@ function timeLeft(date: Date) {
   return `${Math.round(s / 86400)} d`;
 }
 
-type Props = { searchParams: Promise<{ q?: string; page?: string }> };
+type Props = { searchParams: Promise<{ q?: string; page?: string; source?: string }> };
 
 export default async function MyImages({ searchParams }: Props) {
   const user = await requireUser("/account");
-  const { q = "", page: pageRaw } = await searchParams;
+  const { q = "", page: pageRaw, source: sourceRaw } = await searchParams;
+  const source = sourceRaw === "api" || sourceRaw === "web" ? sourceRaw : "";
   const page = Math.max(1, Number.parseInt(pageRaw || "1", 10) || 1);
   const search = q.trim().slice(0, 100);
 
-  const rows = await query<ImageRow & { total: string }>(
-    `SELECT *, count(*) OVER () AS total FROM images
-      WHERE user_id = $1 AND status IN ('active', 'flagged')
-        AND (expires_at IS NULL OR expires_at > now())
-        AND ($2 = '' OR title ILIKE $5 OR slug ILIKE $5)
-      ORDER BY created_at DESC LIMIT $3 OFFSET $4`,
-    [user.id, search, PER_PAGE, (page - 1) * PER_PAGE, `%${search.replace(/[\\%_]/g, (m) => `\\${m}`)}%`],
+  const rows = await query<ImageRow & { total: string; key_name: string | null }>(
+    `SELECT i.*, k.name AS key_name, count(*) OVER () AS total
+       FROM images i LEFT JOIN api_keys k ON k.id = i.api_key_id
+      WHERE i.user_id = $1 AND i.status IN ('active', 'flagged')
+        AND (i.expires_at IS NULL OR i.expires_at > now())
+        AND ($2 = '' OR i.title ILIKE $5 OR i.slug ILIKE $5)
+        AND ($6 = '' OR i.source = $6)
+      ORDER BY i.created_at DESC LIMIT $3 OFFSET $4`,
+    [user.id, search, PER_PAGE, (page - 1) * PER_PAGE, `%${search.replace(/[\\%_]/g, (m) => `\\${m}`)}%`, source],
   );
+  // Counts for the filter tabs (ignoring the current filter, respecting the search).
+  const counts = await query<{ source: string; n: string }>(
+    `SELECT source, count(*) AS n FROM images
+      WHERE user_id = $1 AND status IN ('active', 'flagged') AND (expires_at IS NULL OR expires_at > now())
+        AND ($2 = '' OR title ILIKE $3 OR slug ILIKE $3)
+      GROUP BY source`,
+    [user.id, search, `%${search.replace(/[\\%_]/g, (m) => `\\${m}`)}%`],
+  );
+  const countOf = (s: string) => Number(counts.find((c) => c.source === s)?.n ?? 0);
+  const allCount = countOf("web") + countOf("api");
   const total = Number(rows[0]?.total ?? 0);
   const pages = Math.max(1, Math.ceil(total / PER_PAGE));
 
@@ -58,6 +71,8 @@ export default async function MyImages({ searchParams }: Props) {
       size: formatBytes(Number(r.size_bytes ?? 0)),
       uploaded: new Date(r.created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }),
       flagged: r.status === "flagged",
+      source: r.source === "api" ? "api" : "web",
+      keyName: r.key_name,
       expires: r.expires_at ? timeLeft(r.expires_at) : null,
       frame: String(total - ((page - 1) * PER_PAGE + i)).padStart(2, "0"),
       codes: {
@@ -72,7 +87,10 @@ export default async function MyImages({ searchParams }: Props) {
     };
   });
 
-  const qs = (p: number) => `/account?${new URLSearchParams({ ...(search ? { q: search } : {}), page: String(p) })}`;
+  const qs = (p: number) =>
+    `/account?${new URLSearchParams({ ...(search ? { q: search } : {}), ...(source ? { source } : {}), page: String(p) })}`;
+  const filterHref = (s: string) =>
+    `/account${s || search ? `?${new URLSearchParams({ ...(search ? { q: search } : {}), ...(s ? { source: s } : {}) })}` : ""}`;
 
   return (
     <>
@@ -80,9 +98,9 @@ export default async function MyImages({ searchParams }: Props) {
         <div>
           <h1>My images</h1>
           <p>
-            {total === 0 && !search
+            {allCount === 0 && !search
               ? "Images you upload appear here."
-              : `${total} image${total === 1 ? "" : "s"}${search ? ` matching “${search}”` : ""}`}
+              : `${total} image${total === 1 ? "" : "s"}${source ? ` uploaded ${source === "api" ? "with the API" : "on the website"}` : ""}${search ? ` matching “${search}”` : ""}`}
           </p>
         </div>
         <Link href="/" className="btn primary">
@@ -90,7 +108,7 @@ export default async function MyImages({ searchParams }: Props) {
         </Link>
       </div>
 
-      {(total > 0 || search) && (
+      {(allCount > 0 || search || source) && (
         <div className="toolbar">
           <form role="search" action="/account">
             <label htmlFor="q" className="sr-only">
@@ -102,16 +120,35 @@ export default async function MyImages({ searchParams }: Props) {
             </button>
           </form>
           {search && (
-            <Link href="/account" className="btn ghost small">
+            <Link href={source ? `/account?source=${source}` : "/account"} className="btn ghost small">
               Clear search
             </Link>
           )}
+          <nav className="segmented" aria-label="Filter by how images were uploaded">
+            <Link href={filterHref("")} aria-current={source === "" ? "page" : undefined}>
+              All <span className="seg-count">{allCount}</span>
+            </Link>
+            <Link href={filterHref("web")} aria-current={source === "web" ? "page" : undefined}>
+              Web <span className="seg-count">{countOf("web")}</span>
+            </Link>
+            <Link href={filterHref("api")} aria-current={source === "api" ? "page" : undefined}>
+              API <span className="seg-count">{countOf("api")}</span>
+            </Link>
+          </nav>
         </div>
       )}
 
       {tiles.length === 0 ? (
         <div className="panel empty">
-          <h2>{search ? "No images match that name" : "No images yet"}</h2>
+          <h2>
+            {search
+              ? "No images match that name"
+              : source === "api"
+                ? "No images uploaded with the API yet"
+                : source === "web"
+                  ? "No images uploaded on the website yet"
+                  : "No images yet"}
+          </h2>
           <p>{search ? "Try another word, or clear the search." : "Drop an image on the upload page and it will show up here with its links."}</p>
           {!search && (
             <Link href="/" className="btn primary">

@@ -150,4 +150,15 @@ CREATE TABLE IF NOT EXISTS oauth_accounts (
 CREATE INDEX IF NOT EXISTS idx_oauth_user ON oauth_accounts (user_id);
 `,
   },
+  {
+    id: 4,
+    name: "upload source and default plan",
+    sql: `
+ALTER TABLE images ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'web';  -- web | api
+UPDATE images SET source = 'api' WHERE api_key_id IS NOT NULL AND source <> 'api';
+CREATE INDEX IF NOT EXISTS idx_images_user_source ON images (user_id, source, created_at DESC);
+ALTER TABLE users ALTER COLUMN plan SET DEFAULT 'free';
+UPDATE users SET plan = 'free' WHERE plan IS NULL OR plan NOT IN ('free', 'pro', 'business');
+`,
+  },
 ];

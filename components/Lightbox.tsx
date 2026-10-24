@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { IconChevron, IconCopy, IconOpen, IconTrash, IconX } from "./Icons";
 import { ShareCodes, type Codes } from "./ShareCodes";
+import { SourceTag } from "./SourceTag";
 import { useCopy } from "./Toast";
 
 export type GalleryImage = {
@@ -20,6 +21,8 @@ export type GalleryImage = {
   flagged: boolean;
   expires: string | null;
   frame: string;
+  source: "web" | "api";
+  keyName: string | null;
   codes: Codes;
 };
 
@@ -134,6 +137,14 @@ export function Lightbox({ images, index, onIndex, onClose, onDelete }: Props) {
           <p className="detail">
             {img.width} × {img.height} · {img.size} · {img.uploaded}
             {img.expires ? ` · deletes in ${img.expires}` : ""}
+          </p>
+          <p className="lb-source">
+            <SourceTag source={img.source} />
+            <span className="detail">
+              {img.source === "api"
+                ? `Uploaded with the API${img.keyName ? ` using the key “${img.keyName}”` : ""}`
+                : "Uploaded on the website"}
+            </span>
           </p>
         </div>
 

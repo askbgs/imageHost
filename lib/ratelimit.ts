@@ -31,3 +31,12 @@ export async function rateLimit(key: string, limit: number, windowSeconds = 3600
   const retryAfter = oldest ? Math.max(1, Math.ceil((Number(oldest) + windowSeconds * 1000 - now) / 1000)) : windowSeconds;
   return { ok: false, remaining: 0, retryAfter, limit };
 }
+
+/** How many events the sliding window currently holds, and seconds until the oldest drops out. */
+export async function rateUsage(key: string, windowSeconds = 3600): Promise<{ used: number; resetIn: number }> {
+  const now = Date.now();
+  await redis.zremrangebyscore(key, 0, now - windowSeconds * 1000);
+  const [used, oldest] = await Promise.all([redis.zcard(key), redis.zrange(key, 0, 0, "WITHSCORES")]);
+  const resetIn = oldest[1] ? Math.max(0, Math.ceil((Number(oldest[1]) + windowSeconds * 1000 - now) / 1000)) : 0;
+  return { used, resetIn };
+}

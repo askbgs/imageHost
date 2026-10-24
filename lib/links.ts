@@ -21,6 +21,7 @@ export type ImageRow = {
   privacy: string;
   original_name: string | null;
   sha256: string | null;
+  source?: "web" | "api";
 };
 
 export type VariantRow = {
@@ -92,6 +93,7 @@ export function imageData(img: ImageRow, variants: VariantRow[], includeDelete =
     time: Math.floor(new Date(img.created_at).getTime() / 1000),
     expiration,
     status: img.status,
+    source: img.source ?? (img.api_key_id ? "api" : "web"),
     image: file(l.direct, img.mime_type),
     thumb: file(l.thumb, v.thumb?.mime_type ?? img.mime_type),
     medium: file(l.medium, v.medium?.mime_type ?? img.mime_type),

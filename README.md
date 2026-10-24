@@ -19,7 +19,7 @@ This covers Phases 1 to 2 of the spec and most of Phase 3: core upload, the publ
 | Social sign-in | GitHub, Google and Facebook, each enabled by setting its client ID and secret. See [SOCIAL_LOGIN.md](SOCIAL_LOGIN.md) |
 | Accounts | Sign up and sign in with email and password (scrypt hashes, server-side sessions in httpOnly cookies, lockout after repeated wrong passwords). Uploading from the website requires an account by default |
 | My images | Every upload is saved to the uploader's library: search, copy links, open, delete |
-| API keys | Users create and revoke their own keys (shown once, stored hashed). Images uploaded with a key land in the owner's library |
+| API keys | Users create and revoke their own keys (shown once, stored hashed). Images uploaded with a key land in the owner's library. Limits depend on the plan: Free has 1 key and 10 API uploads per hour, counted across the account; admins change plans under Moderation → Users |
 | Settings | Change name and password (signs out other devices), connect or disconnect GitHub, Google and Facebook, sign out everywhere, delete the account and all its images |
 | Moderation | `/admin` for admin accounts: open reports, flagged images, recent uploads, users; remove, remove and block the file, dismiss, mark safe, suspend a user (which also revokes their keys and sessions) |
 

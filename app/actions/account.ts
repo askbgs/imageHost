@@ -5,10 +5,10 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { createKey } from "@/lib/apikeys";
 import { SESSION_COOKIE, currentUser } from "@/lib/auth";
-import { config } from "@/lib/config";
 import { query, queryOne } from "@/lib/db";
 import { IMAGE_ID_RE } from "@/lib/ids";
 import { getImage, removeImage } from "@/lib/images";
+import { planFor } from "@/lib/plans";
 import type { ImageRow } from "@/lib/links";
 
 export type KeyState = { error?: string; key?: string; name?: string };
@@ -54,14 +54,20 @@ export async function createApiKey(_prev: KeyState, form: FormData): Promise<Key
   const name = String(form.get("name") || "").trim().slice(0, 60);
   if (!name) return { error: "Give the key a name, such as the app that will use it." };
 
+  const plan = planFor(await queryOne<{ plan: string; role: string }>(`SELECT plan, role FROM users WHERE id = $1`, [user.id]) ?? {});
   const count = await queryOne<{ n: string }>(
     `SELECT count(*) AS n FROM api_keys WHERE user_id = $1 AND revoked_at IS NULL`,
     [user.id],
   );
-  if (Number(count?.n ?? 0) >= config.limits.maxApiKeysPerUser) {
-    return { error: `You can have up to ${config.limits.maxApiKeysPerUser} active keys. Revoke one first.` };
+  if (Number(count?.n ?? 0) >= plan.maxApiKeys) {
+    return {
+      error:
+        plan.maxApiKeys === 1
+          ? `The ${plan.label} plan includes 1 API key. Revoke your current key to create a new one.`
+          : `The ${plan.label} plan includes up to ${plan.maxApiKeys} API keys. Revoke one to create another.`,
+    };
   }
-  const raw = await createKey(user.id, name, config.limits.userUploadsPerHour);
+  const raw = await createKey(user.id, name, plan.apiUploadsPerHour);
   revalidatePath("/account/keys");
   return { key: raw, name };
 }

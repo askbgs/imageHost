@@ -6,6 +6,7 @@ import { deleteMyImages } from "@/app/actions/account";
 import { useConfirm } from "./ConfirmDialog";
 import { IconCheck, IconClock, IconCopy, IconTrash } from "./Icons";
 import { Lightbox, type GalleryImage } from "./Lightbox";
+import { SourceTag } from "./SourceTag";
 import { useCopy, useToast } from "./Toast";
 
 export function ImageGallery({ initial }: { initial: GalleryImage[] }) {
@@ -161,7 +162,10 @@ export function ImageGallery({ initial }: { initial: GalleryImage[] }) {
                 </span>
               </label>
               <div className="cap">
-                <strong title={img.title}>{img.title}</strong>
+                <div className="cap-title">
+                  <strong title={img.title}>{img.title}</strong>
+                  <SourceTag source={img.source} title={img.source === "api" && img.keyName ? `API key: ${img.keyName}` : undefined} />
+                </div>
                 <span>
                   {img.width} × {img.height} · {img.size} · {img.uploaded}
                 </span>

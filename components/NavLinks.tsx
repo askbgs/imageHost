@@ -12,7 +12,10 @@ export function NavLinks({ signedIn }: { signedIn: boolean }) {
         { href: "/account/keys", label: "API keys" },
         { href: "/account/settings", label: "Settings" },
       ]
-    : [{ href: "/api-docs", label: "API docs" }];
+    : [
+        { href: "/pricing", label: "Pricing" },
+        { href: "/api-docs", label: "API docs" },
+      ];
 
   return (
     <nav className="site-nav" aria-label="Main">

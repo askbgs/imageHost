@@ -33,10 +33,10 @@ export async function createPendingImage(opts: {
     try {
       const row = await queryOne<ImageRow>(
         `INSERT INTO images (id, user_id, api_key_id, original_name, title, slug, storage_key, upload_key,
-                             delete_token, expires_at, uploader_ip, status)
+                             delete_token, expires_at, uploader_ip, status, source)
          VALUES ($1, $2, $3, $4, $5, $6, '', $7, $8,
                  CASE WHEN $9::int IS NULL THEN NULL ELSE now() + make_interval(secs => $9::int) END,
-                 $10, 'pending')
+                 $10, 'pending', $11)
          RETURNING *`,
         [
           id,
@@ -50,6 +50,8 @@ export async function createPendingImage(opts: {
           newDeleteToken(),
           opts.expirationSeconds,
           opts.uploaderIp,
+          // Uploads made with an API key are tagged "api"; everything from the website is "web".
+          opts.apiKeyId ? "api" : "web",
         ],
       );
       return row!;

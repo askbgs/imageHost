@@ -102,7 +102,6 @@ export const config = {
   limits: {
     guestUploadsPerHour: int("GUEST_UPLOADS_PER_HOUR", 30),
     userUploadsPerHour: int("USER_UPLOADS_PER_HOUR", 200),
-    maxApiKeysPerUser: int("MAX_API_KEYS_PER_USER", 10),
     reportsPerHour: int("REPORTS_PER_HOUR", 10),
   },
 
@@ -134,4 +133,6 @@ export const config = {
   moderationThreshold: Number(process.env.MODERATION_THRESHOLD || "0.8"),
 
   abuseEmail: env("ABUSE_EMAIL", "abuse@example.com"),
+  // Where plan upgrades and sales questions go. Defaults to ABUSE_EMAIL.
+  contactEmail: process.env.CONTACT_EMAIL || env("ABUSE_EMAIL", "abuse@example.com"),
 };

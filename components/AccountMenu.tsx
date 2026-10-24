@@ -54,6 +54,9 @@ export function AccountMenu({ name, email, isAdmin }: { name: string; email: str
           <Link role="menuitem" href="/account/settings" onClick={() => setOpen(false)}>
             Settings
           </Link>
+          <Link role="menuitem" href="/pricing" onClick={() => setOpen(false)}>
+            Plans and pricing
+          </Link>
           {isAdmin && (
             <Link role="menuitem" href="/admin" onClick={() => setOpen(false)}>
               Moderation

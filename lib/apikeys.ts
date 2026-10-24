@@ -2,9 +2,10 @@ import { createHash } from "node:crypto";
 import { query, queryOne } from "./db";
 import { ApiError, limitHeaders } from "./http";
 import { newApiKey } from "./ids";
+import { apiRateKey, planFor } from "./plans";
 import { rateLimit } from "./ratelimit";
 
-export type ApiKey = { id: string; user_id: string; rate_limit: number; user_status: string };
+export type ApiKey = { id: string; user_id: string; rate_limit: number; user_status: string; plan: string; role: string };
 
 export const hashKey = (raw: string) => createHash("sha256").update(raw).digest("hex");
 
@@ -24,7 +25,7 @@ export function extractKey(req: Request, formKey?: FormDataEntryValue | null): s
 export async function authenticate(raw: string | null): Promise<ApiKey> {
   if (!raw) throw new ApiError("invalid_key", "An API key is required");
   const key = await queryOne<ApiKey>(
-    `SELECT k.id, k.user_id, k.rate_limit, u.status AS user_status
+    `SELECT k.id, k.user_id, k.rate_limit, u.status AS user_status, u.plan, u.role
        FROM api_keys k JOIN users u ON u.id = k.user_id
       WHERE k.key_hash = $1 AND k.revoked_at IS NULL`,
     [hashKey(raw)],
@@ -35,10 +36,18 @@ export async function authenticate(raw: string | null): Promise<ApiKey> {
   return key;
 }
 
-/** Throws rate_limited when the key is over its hourly upload limit. */
+/** Throws rate_limited when the account is over its plan's hourly API upload limit. */
 export async function enforceKeyLimit(key: ApiKey) {
-  const r = await rateLimit(`rl:key:${key.id}`, key.rate_limit);
-  if (!r.ok) throw new ApiError("rate_limited", "Upload limit reached for this API key", limitHeaders(r));
+  const plan = planFor(key);
+  const r = await rateLimit(apiRateKey(key.user_id), plan.apiUploadsPerHour);
+  if (!r.ok) {
+    const mins = Math.max(1, Math.ceil(r.retryAfter / 60));
+    throw new ApiError(
+      "rate_limited",
+      `${plan.label} plan limit: ${plan.apiUploadsPerHour} API uploads per hour. Try again in ${mins} minute${mins === 1 ? "" : "s"}.`,
+      limitHeaders(r),
+    );
+  }
   return r;
 }
 

@@ -73,6 +73,9 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ d
               Sign in
             </Link>
           </div>
+          <p className="sub">
+            Free forever for personal use. <Link href="/pricing">See plans</Link>
+          </p>
         </section>
         <Features />
       </>

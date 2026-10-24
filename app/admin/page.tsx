@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { revalidatePath } from "next/cache";
+import { SourceTag } from "@/components/SourceTag";
 import { requireAdmin } from "@/lib/auth";
+import { PLANS, PLAN_IDS } from "@/lib/plans";
 import { REPORT_LABELS, type ReportReason } from "@/lib/constants";
 import { query } from "@/lib/db";
 import { IMAGE_ID_RE } from "@/lib/ids";
@@ -87,6 +89,16 @@ function Actions({ imageId, report, flagged }: { imageId: string; report?: boole
   );
 }
 
+async function setUserPlan(formData: FormData) {
+  "use server";
+  await requireAdmin();
+  const id = String(formData.get("user_id") || "");
+  const plan = String(formData.get("plan") || "");
+  if (!(PLAN_IDS as string[]).includes(plan)) return;
+  await query(`UPDATE users SET plan = $2 WHERE id = $1`, [id, plan]);
+  revalidatePath("/admin");
+}
+
 async function setUserStatus(formData: FormData) {
   "use server";
   const admin = await requireAdmin();
@@ -101,7 +113,7 @@ async function setUserStatus(formData: FormData) {
   revalidatePath("/admin");
 }
 
-type UserRow = { id: string; email: string; display_name: string | null; role: string; status: string; created_at: Date; images: string; keys: string };
+type UserRow = { id: string; email: string; display_name: string | null; role: string; status: string; plan: string; created_at: Date; images: string; keys: string };
 
 export default async function AdminPage({ searchParams }: { searchParams: Promise<{ view?: string }> }) {
   const admin = await requireAdmin();
@@ -122,7 +134,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
   const users =
     view === "users"
       ? await query<UserRow>(
-          `SELECT u.id, u.email, u.display_name, u.role, u.status, u.created_at,
+          `SELECT u.id, u.email, u.display_name, u.role, u.status, u.plan, u.created_at,
                   (SELECT count(*) FROM images i WHERE i.user_id = u.id AND i.status IN ('active','flagged')) AS images,
                   (SELECT count(*) FROM api_keys k WHERE k.user_id = u.id AND k.revoked_at IS NULL) AS keys
              FROM users u ORDER BY u.created_at DESC LIMIT 200`,
@@ -213,6 +225,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
             <tr>
               <th>Account</th>
               <th>Images</th>
+              <th>Plan</th>
               <th>API keys</th>
               <th>Joined</th>
               <th>Actions</th>
@@ -230,6 +243,24 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
                   </div>
                 </td>
                 <td>{u.images}</td>
+                <td>
+                  <form action={setUserPlan} className="plan-form" key={`${u.id}-${u.plan}`}>
+                    <input type="hidden" name="user_id" value={u.id} />
+                    <label className="sr-only" htmlFor={`plan-${u.id}`}>
+                      Plan for {u.email}
+                    </label>
+                    <select id={`plan-${u.id}`} name="plan" defaultValue={u.plan}>
+                      {PLAN_IDS.map((p) => (
+                        <option key={p} value={p}>
+                          {PLANS[p].label}
+                        </option>
+                      ))}
+                    </select>
+                    <button type="submit" className="btn secondary small">
+                      Save
+                    </button>
+                  </form>
+                </td>
                 <td>{u.keys}</td>
                 <td>{new Date(u.created_at).toLocaleDateString("en-GB")}</td>
                 <td>
@@ -273,10 +304,10 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
                       </a>
                     </td>
                     <td>
-                      <strong>{img.title || img.slug}</strong>
+                      <strong>{img.title || img.slug}</strong> <SourceTag source={img.source === "api" ? "api" : "web"} />
                       <div className="detail">
                         {img.width} × {img.height}, {new Date(img.created_at).toLocaleString("en-GB")}
-                        {img.api_key_id ? ", via API" : ", web"} {img.status === "flagged" ? ", flagged" : ""}
+                        {img.status === "flagged" ? ", flagged" : ""}
                       </div>
                     </td>
                     <td>

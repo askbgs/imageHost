@@ -5,7 +5,7 @@ import { createApiKey, type KeyState } from "@/app/actions/account";
 import { IconCopy } from "./Icons";
 import { useCopy } from "./Toast";
 
-export function KeyCreator({ siteUrl }: { siteUrl: string }) {
+export function KeyCreator({ siteUrl, limitNote }: { siteUrl: string; limitNote: string | null }) {
   const [state, action, pending] = useActionState<KeyState, FormData>(createApiKey, {});
   const copy = useCopy();
   const form = useRef<HTMLFormElement>(null);
@@ -38,6 +38,9 @@ export function KeyCreator({ siteUrl }: { siteUrl: string }) {
           </div>
         </div>
       )}
+      {limitNote ? (
+        <div className="limit-note">{limitNote}</div>
+      ) : (
       <form ref={form} action={action} className="key-form">
         <div className="field">
           <label htmlFor="key-name">Key name</label>
@@ -47,6 +50,7 @@ export function KeyCreator({ siteUrl }: { siteUrl: string }) {
           {pending ? "Creating…" : "Create key"}
         </button>
       </form>
+      )}
       {state.error && <div className="alert error">{state.error}</div>}
     </div>
   );

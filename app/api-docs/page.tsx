@@ -1,4 +1,5 @@
 import { config } from "@/lib/config";
+import { PLANS, PLAN_IDS } from "@/lib/plans";
 
 export const metadata = { title: "API" };
 
@@ -99,15 +100,36 @@ expiration  optional  delete after N seconds (60 to 15552000)`}</pre>
           <tr><td>413</td><td><code>file_too_large</code></td><td>The image is over {config.maxUploadBytes / 1024 / 1024} MB.</td></tr>
           <tr><td>415</td><td><code>unsupported_type</code></td><td>Not JPG, PNG, GIF, WebP, AVIF, BMP or TIFF. SVG and HEIC are not accepted.</td></tr>
           <tr><td>422</td><td><code>blocked_content</code></td><td>This file was removed before and cannot be uploaded again.</td></tr>
-          <tr><td>429</td><td><code>rate_limited</code></td><td>Your key is over its hourly limit; see the <code>Retry-After</code> header.</td></tr>
+          <tr><td>429</td><td><code>rate_limited</code></td><td>Your account is over its plan&apos;s hourly upload limit; see the <code>Retry-After</code> header.</td></tr>
           <tr><td>502</td><td><code>url_fetch_failed</code></td><td>The image URL could not be downloaded.</td></tr>
+        </tbody>
+      </table>
+
+      <h2>Limits</h2>
+      <p>Upload limits count across all of an account&apos;s keys and reset on a rolling one-hour window.</p>
+      <table>
+        <thead>
+          <tr>
+            <th>Plan</th>
+            <th>API keys</th>
+            <th>API uploads per hour</th>
+          </tr>
+        </thead>
+        <tbody>
+          {PLAN_IDS.map((p) => (
+            <tr key={p}>
+              <td>{PLANS[p].label}</td>
+              <td>{PLANS[p].maxApiKeys}</td>
+              <td>{PLANS[p].apiUploadsPerHour.toLocaleString("en")}</td>
+            </tr>
+          ))}
         </tbody>
       </table>
 
       <h2>Get a key</h2>
       <p>
         <a href="/signup">Create an account</a>, then open <a href="/account/keys">API keys</a> and create a key for each app.
-        Each key can upload {config.limits.userUploadsPerHour} images per hour. Images uploaded with your key appear in My images.
+        Images uploaded with your key appear in My images.
       </p>
     </div>
   );

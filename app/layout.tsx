@@ -78,6 +78,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               <span className="footer-brand">
                 <LogoMark size={16} /> {config.siteName}
               </span>
+              <Link href="/pricing">Pricing</Link>
               <Link href="/api-docs">API</Link>
               <Link href="/terms">Terms</Link>
               <Link href="/privacy">Privacy</Link>
