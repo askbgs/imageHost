@@ -22,7 +22,8 @@ Open **web → Variables → Raw Editor** and paste this, then set your own `ADM
 ```
 SITE_NAME=PinPicX
 SITE_URL=https://${{RAILWAY_PUBLIC_DOMAIN}}
-ABUSE_EMAIL=abuse@yoursite.com
+ABUSE_EMAIL=abuse@pinpicx.app
+CONTACT_EMAIL=info@pinpicx.app
 ADMIN_EMAILS=you@yoursite.com
 ALLOW_SIGNUP=true
 REQUIRE_LOGIN_TO_UPLOAD=true

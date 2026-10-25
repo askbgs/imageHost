@@ -273,4 +273,25 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS uploads_paused_at TIMESTAMPTZ;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS uploads_resumed_at TIMESTAMPTZ;
 `,
   },
+  {
+    id: 9,
+    name: "contact messages",
+    sql: `
+-- Messages from the contact form. Saved even when email isn't set up, and listed in /admin.
+CREATE TABLE IF NOT EXISTS contact_messages (
+  id          BIGSERIAL PRIMARY KEY,
+  user_id     UUID REFERENCES users(id) ON DELETE SET NULL,
+  name        TEXT NOT NULL,
+  email       TEXT NOT NULL,
+  topic       TEXT NOT NULL,
+  message     TEXT NOT NULL,
+  ip          TEXT,
+  status      TEXT NOT NULL DEFAULT 'new',   -- new | done
+  emailed_at  TIMESTAMPTZ,
+  email_error TEXT,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_contact_messages_new ON contact_messages (status, created_at DESC);
+`,
+  },
 ];

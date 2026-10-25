@@ -172,10 +172,19 @@ export const config = {
     ),
   },
 
-  abuseEmail: env("ABUSE_EMAIL", "abuse@example.com"),
-  // Where plan upgrades and sales questions go. Defaults to ABUSE_EMAIL.
+  /** Abuse reports, copyright and legal notices. */
+  abuseEmail: env("ABUSE_EMAIL", "abuse@pinpicx.app"),
+  /** General contact: the contact form sends here, and it's shown for billing and sales questions. */
+  contactEmail: env("CONTACT_EMAIL", "info@pinpicx.app"),
   /** Days after a payment in which a full refund can be asked for (shown on /refunds). */
   refundDays: int("REFUND_DAYS", 14),
-  contactEmail:
-    process.env.CONTACT_EMAIL || env("ABUSE_EMAIL", "abuse@example.com"),
+
+  // Outgoing email (contact form). Sent through Resend's HTTPS API: Railway blocks SMTP on
+  // Free, Trial and Hobby plans. Without a key, messages are still saved and shown in /admin.
+  mail: {
+    resendKey: process.env.RESEND_API_KEY || "",
+    resendUrl: process.env.RESEND_API_URL || "https://api.resend.com/emails",
+    /** Sender address; its domain must be verified in Resend. */
+    from: process.env.MAIL_FROM || "PinPicX <noreply@pinpicx.app>",
+  },
 };

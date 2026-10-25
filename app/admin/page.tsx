@@ -10,6 +10,8 @@ import { IMAGE_ID_RE } from "@/lib/ids";
 import { getImage, removeImage } from "@/lib/images";
 import { links, type ImageRow } from "@/lib/links";
 import { LABEL_TEXT, resumeUploads, screeningStatus } from "@/lib/moderation";
+import { CONTACT_TOPICS, type ContactTopic } from "@/lib/contact";
+import { config } from "@/lib/config";
 
 const pct = (n: unknown) =>
   typeof n === "number" ? `${Math.round(n * 100)}%` : "";
@@ -141,6 +143,19 @@ function Actions({
   );
 }
 
+async function messageDoneAction(formData: FormData) {
+  "use server";
+  await requireAdmin();
+  const id = String(formData.get("id") || "");
+  const done = formData.get("done") === "1";
+  if (/^\d+$/.test(id))
+    await query(`UPDATE contact_messages SET status = $2 WHERE id = $1`, [
+      id,
+      done ? "done" : "new",
+    ]);
+  revalidatePath("/admin");
+}
+
 async function resumeAction(formData: FormData) {
   "use server";
   await requireAdmin();
@@ -192,6 +207,19 @@ type UserRow = {
   uploads_paused_at: Date | null;
 };
 
+type MessageRow = {
+  id: string;
+  name: string;
+  email: string;
+  topic: string;
+  message: string;
+  status: string;
+  created_at: Date;
+  emailed_at: Date | null;
+  email_error: string | null;
+  account: string | null;
+};
+
 type BlockedRow = {
   id: string;
   created_at: Date;
@@ -238,6 +266,16 @@ export default async function AdminPage({
         )
       : [];
 
+  const messages =
+    view === "messages"
+      ? await query<MessageRow>(
+          `SELECT m.id, m.name, m.email, m.topic, m.message, m.status, m.created_at, m.emailed_at, m.email_error,
+                  u.email AS account
+             FROM contact_messages m LEFT JOIN users u ON u.id = m.user_id
+            ORDER BY (m.status = 'new') DESC, m.created_at DESC LIMIT 200`,
+        )
+      : [];
+
   const blocked =
     view === "blocked"
       ? await query<BlockedRow>(
@@ -263,12 +301,14 @@ export default async function AdminPage({
     total: string;
     blocked: string;
     paused: string;
+    messages: string;
   }>(
     `SELECT (SELECT count(*) FROM reports WHERE status = 'open') AS open,
             (SELECT count(*) FROM images WHERE status = 'flagged') AS flagged,
             (SELECT count(*) FROM images WHERE status IN ('active', 'flagged')) AS total,
             (SELECT count(*) FROM images WHERE fail_reason LIKE 'blocked%' AND created_at > now() - interval '24 hours') AS blocked,
-            (SELECT count(*) FROM users WHERE uploads_paused_at IS NOT NULL) AS paused`,
+            (SELECT count(*) FROM users WHERE uploads_paused_at IS NOT NULL) AS paused,
+            (SELECT count(*) FROM contact_messages WHERE status = 'new') AS messages`,
   );
   const screening = screeningStatus();
 
@@ -342,6 +382,13 @@ export default async function AdminPage({
           aria-current={view === "recent" ? "page" : undefined}
         >
           Recent uploads
+        </Link>
+        <Link
+          href="/admin?view=messages"
+          aria-current={view === "messages" ? "page" : undefined}
+        >
+          Messages
+          {counts && counts.messages !== "0" ? ` (${counts.messages})` : ""}
         </Link>
         <Link
           href="/admin?view=users"
@@ -510,6 +557,53 @@ export default async function AdminPage({
           </table>
         </div>
       )}
+
+      {view === "messages" &&
+        (messages.length === 0 ? (
+          <p>No messages yet. They arrive from the contact form at /contact.</p>
+        ) : (
+          <div className="message-list">
+            {messages.map((m) => (
+              <article
+                key={m.id}
+                className={`panel message${m.status === "done" ? " is-done" : ""}`}
+              >
+                <header>
+                  <div>
+                    <strong>{m.name}</strong>{" "}
+                    <a
+                      href={`mailto:${m.email}?subject=${encodeURIComponent(`Re: ${CONTACT_TOPICS[m.topic as ContactTopic] ?? m.topic}`)}`}
+                    >
+                      {m.email}
+                    </a>
+                    <div className="detail">
+                      {CONTACT_TOPICS[m.topic as ContactTopic] ?? m.topic} ·{" "}
+                      {new Date(m.created_at).toLocaleString("en-GB")}
+                      {m.account ? ` · account ${m.account}` : ""}
+                    </div>
+                  </div>
+                  <form action={messageDoneAction}>
+                    <input type="hidden" name="id" value={m.id} />
+                    <input
+                      type="hidden"
+                      name="done"
+                      value={m.status === "done" ? "0" : "1"}
+                    />
+                    <button className="btn secondary small" type="submit">
+                      {m.status === "done" ? "Mark as new" : "Mark as done"}
+                    </button>
+                  </form>
+                </header>
+                <p className="message-body">{m.message}</p>
+                <p className="detail" style={{ margin: 0 }}>
+                  {m.emailed_at
+                    ? `Emailed to ${config.contactEmail}`
+                    : `Not emailed${m.email_error ? `: ${m.email_error.replace(/[.\s]+$/, "")}` : ""}. Reply from here.`}
+                </p>
+              </article>
+            ))}
+          </div>
+        ))}
 
       {view === "blocked" &&
         (blocked.length === 0 ? (

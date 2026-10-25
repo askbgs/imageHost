@@ -15,6 +15,9 @@ export default function Abuse() {
         <a href={`mailto:${config.abuseEmail}`}>{config.abuseEmail}</a> with the image links and the reason.
       </p>
       <p>
+        For anything else, use the <a href="/contact">contact form</a>.
+      </p>
+      <p>
         If an image shows a child being abused, report it to us and also to your national hotline or to the{" "}
         <a href="https://www.inhope.org/EN" target="_blank" rel="noreferrer">
           INHOPE network

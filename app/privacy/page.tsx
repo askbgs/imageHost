@@ -35,6 +35,12 @@ export default function Privacy() {
         date, and your Paddle customer ID.
       </p>
 
+      <h2>Messages you send us</h2>
+      <p>
+        When you use the contact form we keep your name, email address, message and IP address so we can reply and
+        prevent spam, and we email the message to our team. Ask us to delete it at any time.
+      </p>
+
       <h2>Deleting your data</h2>
       <p>
         Delete single images from My images. To delete everything, open{" "}

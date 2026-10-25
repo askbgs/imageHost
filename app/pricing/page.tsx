@@ -195,7 +195,7 @@ export default async function PricingPage({
     ],
     cta: {
       label: "Contact us",
-      href: mail("PinPicX Enterprise"),
+      href: "/contact?topic=enterprise",
       tone: "secondary",
     },
   });

@@ -945,3 +945,21 @@ h1 .vis-badge { font-size: 13px; margin-left: 8px; vertical-align: 6px; }
 .finding { font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: var(--warn-soft); color: var(--warn); }
 .paused-row { display: flex; align-items: center; gap: 8px; margin-top: 6px; flex-wrap: wrap; }
 .paused-row .status-chip { margin-left: 0; }
+
+/* ---------- Contact ---------- */
+.contact { max-width: 680px; }
+.contact-form { display: grid; gap: 16px; padding: 24px; }
+.contact-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+@media (max-width: 600px) { .contact-row { grid-template-columns: 1fr; } }
+.contact-form select, .contact-form textarea { width: 100%; }
+.contact-actions { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.contact-done { padding: 28px; display: grid; gap: 10px; justify-items: start; }
+.contact-done h2 { margin: 0; }
+.contact-done p { margin: 0; color: var(--muted); }
+/* Honeypot: off-screen for people, still in the form for bots. */
+.hp { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
+.message-list { display: grid; gap: 12px; }
+.message { padding: 16px 18px; display: grid; gap: 10px; }
+.message header { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; flex-wrap: wrap; }
+.message-body { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.message.is-done { opacity: 0.6; }
