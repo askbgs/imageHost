@@ -20,9 +20,14 @@ export async function deleteMyImage(
 ): Promise<{ ok: boolean; error?: string }> {
   const user = await currentUser();
   if (!user) return { ok: false, error: "Sign in again to delete images." };
-  const img = IMAGE_ID_RE.test(id) ? await getImage(id) : null;
-  if (!img || img.user_id !== user.id || img.status === "removed")
-    return { ok: false, error: "Image not found." };
+  // The owner is part of the lookup: another account's image is never even loaded.
+  const img = IMAGE_ID_RE.test(id)
+    ? await queryOne<ImageRow>(
+        `SELECT * FROM images WHERE id = $1 AND user_id = $2 AND status <> 'removed'`,
+        [id, user.id],
+      )
+    : null;
+  if (!img) return { ok: false, error: "Image not found." };
   await removeImage(img);
   revalidatePath("/account");
   return { ok: true };

@@ -1,6 +1,6 @@
 import { ApiError, apiOk, handleError } from "@/lib/http";
-import { IMAGE_ID_RE, tokenMatches } from "@/lib/ids";
-import { failureToError, getImage, getVariants } from "@/lib/images";
+import { IMAGE_ID_RE } from "@/lib/ids";
+import { failureToError, getImage, getVariants, mayUseToken } from "@/lib/images";
 import { imageData } from "@/lib/links";
 import { rescueStuck } from "@/lib/queue";
 
@@ -15,7 +15,8 @@ export async function GET(
     const { id } = await ctx.params;
     const token = new URL(req.url).searchParams.get("token") ?? "";
     let img = IMAGE_ID_RE.test(id) ? await getImage(id) : null;
-    if (!img || !tokenMatches(token, img.delete_token))
+    // Guest uploads: the token is enough. Account uploads: also the signed-in owner.
+    if (!img || !(await mayUseToken(img, token)))
       throw new ApiError("not_found", "Unknown upload");
     if (
       (img.status === "pending" || img.status === "processing") &&

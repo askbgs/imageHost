@@ -1,7 +1,8 @@
 import { config } from "./config";
 import { pool, query, queryOne } from "./db";
 import { ApiError } from "./http";
-import { newDeleteToken, newImageId, newUploadSuffix } from "./ids";
+import { newDeleteToken, newImageId, newUploadSuffix, tokenMatches } from "./ids";
+import { currentUser } from "./auth";
 import type { ImageRow, VariantRow } from "./links";
 import { purgeUrls } from "./cdn";
 import { links } from "./links";
@@ -107,6 +108,19 @@ export async function getVariants(id: string): Promise<VariantRow[]> {
   return query<VariantRow>(`SELECT * FROM image_variants WHERE image_id = $1`, [
     id,
   ]);
+}
+
+/**
+ * Ownership rule for links that carry an image's secret token (delete links, upload progress):
+ * - a guest upload (no account) can be handled by whoever holds its token;
+ * - an image that belongs to an account can only be handled by that account, signed in.
+ *   The token alone is never enough, so a leaked or shared delete link can't remove someone's image.
+ */
+export async function mayUseToken(img: ImageRow, token: string | null | undefined): Promise<boolean> {
+  if (!token || !tokenMatches(token, img.delete_token)) return false;
+  if (!img.user_id) return true;
+  const user = await currentUser();
+  return user?.id === img.user_id;
 }
 
 /** Images that can be shown publicly right now. */

@@ -1,8 +1,8 @@
 import { assertSameOrigin } from "@/lib/auth";
 import { config } from "@/lib/config";
 import { ApiError, apiOk, handleError } from "@/lib/http";
-import { IMAGE_ID_RE, tokenMatches } from "@/lib/ids";
-import { getImage } from "@/lib/images";
+import { IMAGE_ID_RE } from "@/lib/ids";
+import { getImage, mayUseToken } from "@/lib/images";
 import { finalize } from "@/lib/ingest";
 import { headObject } from "@/lib/s3";
 
@@ -18,7 +18,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     if (!IMAGE_ID_RE.test(id)) throw new ApiError("not_found", "Unknown upload");
 
     const img = await getImage(id);
-    if (!img || !body.token || !tokenMatches(body.token, img.delete_token)) {
+    // Guest uploads: the token is enough. Account uploads: also the signed-in owner.
+    if (!img || !(await mayUseToken(img, body.token))) {
       throw new ApiError("not_found", "Unknown upload");
     }
     if (img.status !== "pending" && img.status !== "processing") {

@@ -70,11 +70,13 @@ album       optional  ID of one of your albums to put the image in
           </tr>
           <tr>
             <td><code>GET /v1/images/&#123;id&#125;</code></td>
-            <td>One image&apos;s links and details.</td>
+            <td>
+              Links and details of one of <strong>your</strong> images. Returns 202 while it&apos;s still processing.
+            </td>
           </tr>
           <tr>
             <td><code>DELETE /v1/images/&#123;id&#125;</code></td>
-            <td>Delete with your key, or with <code>?delete_token=…</code> for a guest upload.</td>
+            <td>Delete one of <strong>your</strong> images and all its links.</td>
           </tr>
           <tr>
             <td><code>POST /v1/reports</code></td>
@@ -82,6 +84,27 @@ album       optional  ID of one of your albums to put the image in
           </tr>
         </tbody>
       </table>
+
+      <h3>Looking up and deleting images</h3>
+      <p>
+        <code>GET</code> and <code>DELETE /v1/images/&#123;id&#125;</code> always need your API key, and only work on images
+        in the account the key belongs to. Without a key you get <code>401 invalid_key</code>. For an image in another
+        account, one that was deleted, or an ID that doesn&apos;t exist, you get the same{" "}
+        <code>404 not_found</code> (&quot;No image with this ID in your account&quot;), so an image ID never reveals
+        whether an image exists or who it belongs to. Lookups that don&apos;t find an image are limited to 60 an hour
+        per account; after that you get <code>429 rate_limited</code>.
+      </p>
+      <p>
+        Send the key in a header (<code>Authorization: Bearer YOUR_KEY</code> or <code>X-API-Key</code>) rather than in
+        the URL, so it doesn&apos;t end up in logs:
+      </p>
+      <pre>{`curl -H "Authorization: Bearer YOUR_KEY" ${base}/v1/images/AbC12345
+curl -X DELETE -H "Authorization: Bearer YOUR_KEY" ${base}/v1/images/AbC12345`}</pre>
+      <p>
+        Every upload also returns a <code>delete_url</code>, which opens a confirmation page. For an image in an
+        account, that page only works when you&apos;re signed in as that account, so a leaked or shared link can&apos;t
+        remove your image. For an upload made without an account, the link alone is enough.
+      </p>
 
       <h2>Errors</h2>
       <p>
