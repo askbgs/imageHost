@@ -1,4 +1,4 @@
-# Contact form and email addresses
+# Email: contact form, password reset and addresses
 
 PinPicX uses two addresses:
 
@@ -22,7 +22,7 @@ both to the inbox you already use:
 2. Add a destination address (for example your Gmail) and confirm it from the email Cloudflare sends.
 3. Create routing rules: `info@pinpicx.app` → your inbox, and `abuse@pinpicx.app` → your inbox.
 
-## 2. Send the contact form's emails (Resend)
+## 2. Send email (Resend): contact form and password reset
 
 Railway blocks outgoing SMTP on its Free, Trial and Hobby plans, so PinPicX sends through Resend's HTTPS API, which
 works on every plan. Its free tier is plenty for a contact form.
@@ -38,10 +38,27 @@ works on every plan. Its free tier is plenty for a contact form.
    MAIL_FROM=PinPicX <noreply@pinpicx.app>
    ```
 
-5. Redeploy, send yourself a message from **/contact**, and check it arrives at `info@pinpicx.app`.
+5. Redeploy, send yourself a message from **/contact**, and check it arrives at `info@pinpicx.app`. Then use
+   **Forgot password?** on the sign-in page with your own address and check the reset email arrives.
 
-Each email comes **from** `noreply@pinpicx.app`, with **Reply-To** set to the person who wrote, so pressing Reply in
-your inbox answers them directly.
+Until `RESEND_API_KEY` is set, the **Forgot password?** page tells people to contact you instead.
+
+Contact form emails come **from** `noreply@pinpicx.app`, with **Reply-To** set to the person who wrote, so pressing
+Reply in your inbox answers them directly.
+
+## Password reset
+
+**Sign in → Forgot password?** emails a link to choose a new password.
+
+- The page always says *"If this address has an account, we've sent a link"*, so it can't be used to find out who
+  has an account.
+- The link works once and expires after 60 minutes (`RESET_LINK_MINUTES`). Asking again cancels older links. Only a
+  hashed copy of each link is stored.
+- At most 3 emails an hour to one address and 10 requests an hour from one network.
+- Choosing a new password signs the account out on every device, signs it in on this one, and emails a *"Your
+  password was changed"* notice. Changing the password in Settings sends the same notice.
+- Accounts that only use Google, GitHub or Facebook get the same email, reminding them they can sign in with that
+  button, or use the link to set a password.
 
 ## Spam protection
 

@@ -294,4 +294,21 @@ CREATE TABLE IF NOT EXISTS contact_messages (
 CREATE INDEX IF NOT EXISTS idx_contact_messages_new ON contact_messages (status, created_at DESC);
 `,
   },
+  {
+    id: 10,
+    name: "password resets",
+    sql: `
+-- One row per "forgot password" email. Only a SHA-256 of the link's token is stored, like a password,
+-- so a database leak doesn't hand out working reset links.
+CREATE TABLE IF NOT EXISTS password_resets (
+  token_hash TEXT PRIMARY KEY,
+  user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  ip         TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  expires_at TIMESTAMPTZ NOT NULL,
+  used_at    TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS idx_password_resets_user ON password_resets (user_id, created_at DESC);
+`,
+  },
 ];

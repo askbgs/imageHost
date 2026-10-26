@@ -1,5 +1,9 @@
 import { disconnectProvider, signOutEverywhere } from "@/app/actions/auth";
-import { DeleteAccountForm, PasswordForm, ProfileForm } from "@/components/SettingsForms";
+import {
+  DeleteAccountForm,
+  PasswordForm,
+  ProfileForm,
+} from "@/components/SettingsForms";
 import { requireUser } from "@/lib/auth";
 import { queryOne } from "@/lib/db";
 import { PROVIDER_IDS, enabledProviders, providerLabel } from "@/lib/oauth";
@@ -8,11 +12,18 @@ import { signInMethods } from "@/lib/social";
 
 export const metadata = { title: "Settings" };
 
-type Props = { searchParams: Promise<{ error?: string; connected?: string; disconnected?: string }> };
+type Props = {
+  searchParams: Promise<{
+    error?: string;
+    connected?: string;
+    disconnected?: string;
+    reset?: string;
+  }>;
+};
 
 export default async function SettingsPage({ searchParams }: Props) {
   const user = await requireUser("/account/settings");
-  const { error, connected, disconnected } = await searchParams;
+  const { error, connected, disconnected, reset } = await searchParams;
   const sessions = await queryOne<{ n: string }>(
     `SELECT count(*) AS n FROM sessions WHERE user_id = $1 AND expires_at > now()`,
     [user.id],
@@ -25,19 +36,29 @@ export default async function SettingsPage({ searchParams }: Props) {
   const rows = PROVIDER_IDS.filter((id) => enabled.has(id) || linked.has(id));
   const canDisconnect = methods.hasPassword || methods.providers.length > 1;
   const errorText = oauthMessage(error);
-  const known = (v?: string) => (v && (PROVIDER_IDS as string[]).includes(v) ? v : null);
-  const notice = known(connected)
-    ? `${providerLabel(connected!)} is connected. You can use it to sign in.`
-    : known(disconnected)
-      ? `${providerLabel(disconnected!)} was disconnected.`
-      : null;
+  const known = (v?: string) =>
+    v && (PROVIDER_IDS as string[]).includes(v) ? v : null;
+  const notice = reset
+    ? "Your password was changed and you're signed in. Other devices were signed out."
+    : known(connected)
+      ? `${providerLabel(connected!)} is connected. You can use it to sign in.`
+      : known(disconnected)
+        ? `${providerLabel(disconnected!)} was disconnected.`
+        : null;
 
   return (
     <div className="stack-l" style={{ maxWidth: 640 }}>
       <div className="page-head" style={{ paddingBottom: 0 }}>
         <div>
           <h1>Settings</h1>
-          <p>Member since {new Date(user.created_at).toLocaleDateString("en-GB", { month: "long", year: "numeric" })}.</p>
+          <p>
+            Member since{" "}
+            {new Date(user.created_at).toLocaleDateString("en-GB", {
+              month: "long",
+              year: "numeric",
+            })}
+            .
+          </p>
         </div>
       </div>
 
@@ -61,15 +82,25 @@ export default async function SettingsPage({ searchParams }: Props) {
       {rows.length > 0 && (
         <section className="panel">
           <h2>Sign-in methods</h2>
-          <p className="detail">Connect accounts so you can sign in with one click.</p>
+          <p className="detail">
+            Connect accounts so you can sign in with one click.
+          </p>
           <div className="methods">
             <div className="method">
-              <span className="social-mark" aria-hidden="true" style={{ background: "var(--accent)" }}>
+              <span
+                className="social-mark"
+                aria-hidden="true"
+                style={{ background: "var(--accent)" }}
+              >
                 @
               </span>
               <div className="who">
                 <strong>Email and password</strong>
-                <span>{methods.hasPassword ? user.email : "Not set up. Set a password below."}</span>
+                <span>
+                  {methods.hasPassword
+                    ? user.email
+                    : "Not set up. Set a password below."}
+                </span>
               </div>
             </div>
             {rows.map((id) => {
@@ -81,7 +112,11 @@ export default async function SettingsPage({ searchParams }: Props) {
                   </span>
                   <div className="who">
                     <strong>{providerLabel(id)}</strong>
-                    <span>{link ? `Connected${link.email ? ` as ${link.email}` : ""}` : "Not connected"}</span>
+                    <span>
+                      {link
+                        ? `Connected${link.email ? ` as ${link.email}` : ""}`
+                        : "Not connected"}
+                    </span>
                   </div>
                   {link ? (
                     <form action={disconnectProvider}>
@@ -90,13 +125,20 @@ export default async function SettingsPage({ searchParams }: Props) {
                         type="submit"
                         className="btn danger-quiet small"
                         disabled={!canDisconnect}
-                        title={canDisconnect ? undefined : "Set a password or connect another provider first"}
+                        title={
+                          canDisconnect
+                            ? undefined
+                            : "Set a password or connect another provider first"
+                        }
                       >
                         Disconnect
                       </button>
                     </form>
                   ) : enabled.has(id) ? (
-                    <a className="btn secondary small" href={`/auth/${id}?mode=link`}>
+                    <a
+                      className="btn secondary small"
+                      href={`/auth/${id}?mode=link`}
+                    >
                       Connect
                     </a>
                   ) : null}
@@ -120,7 +162,8 @@ export default async function SettingsPage({ searchParams }: Props) {
       <section className="panel">
         <h2>Signed-in devices</h2>
         <p className="detail">
-          You&apos;re signed in on {n} device{n === 1 ? "" : "s"}. Sign out everywhere if you lost one or used a shared computer.
+          You&apos;re signed in on {n} device{n === 1 ? "" : "s"}. Sign out
+          everywhere if you lost one or used a shared computer.
         </p>
         <form action={signOutEverywhere}>
           <button type="submit" className="btn secondary">
@@ -132,8 +175,9 @@ export default async function SettingsPage({ searchParams }: Props) {
       <section className="panel" id="delete">
         <h2>Delete account</h2>
         <p className="detail">
-          Permanently deletes your account, all your images and their links, your API keys and connected sign-in
-          methods. This can&apos;t be undone.
+          Permanently deletes your account, all your images and their links,
+          your API keys and connected sign-in methods. This can&apos;t be
+          undone.
         </p>
         <DeleteAccountForm email={user.email} />
       </section>

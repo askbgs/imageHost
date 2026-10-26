@@ -963,3 +963,7 @@ h1 .vis-badge { font-size: 13px; margin-left: 8px; vertical-align: 6px; }
 .message header { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; flex-wrap: wrap; }
 .message-body { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 .message.is-done { opacity: 0.6; }
+
+/* ---------- Password reset ---------- */
+.label-row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.label-link { font-size: 13px; font-weight: 500; }
